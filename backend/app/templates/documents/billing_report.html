@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>{{ report_title or "MaaS-Router Billing Report" }}</title>
+<style>
+  @page {
+    size: A4;
+    margin: 2cm 1.8cm 2.5cm 1.8cm;
+    @top-center {
+      content: "MaaS-Router — Billing Report";
+      font-family: 'Inter', 'PingFang SC', sans-serif;
+      font-size: 9px;
+      color: #9ca3af;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+    @bottom-center {
+      content: "Confidential | Page " counter(page) " of " counter(pages);
+      font-family: 'Inter', 'PingFang SC', sans-serif;
+      font-size: 8px;
+      color: #9ca3af;
+    }
+    @bottom-left {
+      content: "Generated: {{ now.strftime('%Y-%m-%d %H:%M UTC') if now else '' }}";
+      font-size: 7px;
+      color: #d1d5db;
+    }
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Inter', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+    font-size: 10.5pt;
+    line-height: 1.6;
+    color: #1f2937;
+  }
+
+  /* ── Cover Page ── */
+  .cover {
+    page-break-after: always;
+    text-align: center;
+    padding-top: 180px;
+  }
+  .cover .brand-bar {
+    width: 80px; height: 4px;
+    background: linear-gradient(90deg, {{ brand.primary }}, {{ brand.secondary }});
+    margin: 0 auto 40px;
+    border-radius: 2px;
+  }
+  .cover h1 {
+    font-size: 32pt;
+    font-weight: 700;
+    color: {{ brand.primary_dark }};
+    margin-bottom: 8px;
+    letter-spacing: -0.5px;
+  }
+  .cover .subtitle {
+    font-size: 14pt;
+    color: #6b7280;
+    margin-bottom: 48px;
+  }
+  .cover .meta {
+    font-size: 9pt;
+    color: #9ca3af;
+    line-height: 2;
+  }
+  .cover .meta strong {
+    color: #4b5563;
+    font-weight: 600;
+  }
+
+  /* ── Section Headers ── */
+  h2 {
+    font-size: 16pt;
+    font-weight: 700;
+    color: {{ brand.primary_dark }};
+    border-bottom: 2px solid {{ brand.primary }};
+    padding-bottom: 6px;
+    margin: 36px 0 16px 0;
+    page-break-after: avoid;
+  }
+  h3 {
+    font-size: 12pt;
+    font-weight: 600;
+    color: #374151;
+    margin: 20px 0 10px 0;
+    page-break-after: avoid;
+  }
+
+  /* ── KPI Cards ── */
+  .kpi-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-bottom: 24px;
+  }
+  .kpi-card {
+    flex: 1;
+    min-width: 140px;
+    background: #f9fafb;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 14px;
+    text-align: center;
+  }
+  .kpi-card .label {
+    font-size: 8pt;
+    text-transform: uppercase;
+    color: #9ca3af;
+    letter-spacing: 0.5px;
+    margin-bottom: 4px;
+  }
+  .kpi-card .value {
+    font-size: 20pt;
+    font-weight: 700;
+    color: {{ brand.primary_dark }};
+  }
+  .kpi-card .value.revenue {
+    color: #059669;
+  }
+  .kpi-card .value.users {
+    color: {{ brand.primary }};
+  }
+  .kpi-card .value.warning {
+    color: {{ brand.warning }};
+  }
+
+  /* ── Tables ── */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 12px 0 20px 0;
+    font-size: 9pt;
+    page-break-inside: avoid;
+  }
+  th {
+    background: {{ brand.primary }};
+    color: white;
+    font-weight: 600;
+    font-size: 8.5pt;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 8px 10px;
+    text-align: left;
+  }
+  th:last-child, td:last-child { text-align: right; }
+  td {
+    padding: 7px 10px;
+    border-bottom: 1px solid #f3f4f6;
+  }
+  tr:nth-child(even) td { background: #f9fafb; }
+  tr:hover td { background: #eef2ff; }
+
+  /* ── Summary Box ── */
+  .info-box {
+    background: #eef2ff;
+    border-left: 4px solid {{ brand.primary }};
+    padding: 12px 16px;
+    border-radius: 0 6px 6px 0;
+    margin: 16px 0;
+    font-size: 9.5pt;
+  }
+
+  /* ── Status Badges ── */
+  .badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 7.5pt;
+    font-weight: 600;
+    text-transform: uppercase;
+  }
+  .badge-success { background: #d1fae5; color: #065f46; }
+  .badge-warning { background: #fef3c7; color: #92400e; }
+  .badge-danger  { background: #fee2e2; color: #991b1b; }
+  .badge-info    { background: #dbeafe; color: #1e40af; }
+
+  /* ── Print Helpers ── */
+  .page-break { page-break-before: always; }
+</style>
+</head>
+<body>
+
+<!-- ═══════════ COVER PAGE ═══════════ -->
+<div class="cover">
+  <div class="brand-bar"></div>
+  <h1>{{ report_title or "Billing Report" }}</h1>
+  <p class="subtitle">{{ summary.total_revenue | money }} Total Revenue</p>
+  <div class="meta">
+    <p><strong>Period:</strong> {{ period_start }} → {{ period_end }}</p>
+    <p><strong>Generated:</strong> {{ now.strftime('%Y-%m-%d %H:%M UTC') }}</p>
+    <p><strong>Classification:</strong> Internal — Confidential</p>
+  </div>
+</div>
+
+<!-- ═══════════ EXECUTIVE SUMMARY ═══════════ -->
+<h2>1. Executive Summary</h2>
+
+<div class="kpi-grid">
+  <div class="kpi-card">
+    <div class="label">Total Revenue</div>
+    <div class="value revenue">{{ summary.total_revenue | money }}</div>
+  </div>
+  <div class="kpi-card">
+    <div class="label">Today's Revenue</div>
+    <div class="value revenue">{{ summary.today_revenue | money }}</div>
+  </div>
+  <div class="kpi-card">
+    <div class="label">Transactions</div>
+    <div class="value users">{{ summary.total_transactions | number }}</div>
+  </div>
+  <div class="kpi-card">
+    <div class="label">Active Users</div>
+    <div class="value">{{ summary.active_users | number }}</div>
+  </div>
+  <div class="kpi-card">
+    <div class="label">New Users</div>
+    <div class="value">{{ summary.new_users | number }}</div>
+  </div>
+</div>
+
+<div class="info-box">
+  <strong>📊 Summary:</strong> During the period <strong>{{ period_start }} → {{ period_end }}</strong>,
+  MaaS-Router processed <strong>{{ summary.total_transactions | number }}</strong> transactions
+  from <strong>{{ summary.active_users | number }}</strong> active users,
+  generating total revenue of <strong>{{ summary.total_revenue | money }}</strong>.
+</div>
+
+<!-- ═══════════ DAILY BREAKDOWN ═══════════ -->
+<h2>2. Daily Revenue Breakdown</h2>
+
+{% if daily_breakdown %}
+<table>
+  <thead>
+    <tr>
+      <th>Date</th>
+      <th>Requests</th>
+      <th>Tokens</th>
+      <th>Revenue (CRED)</th>
+      <th>Avg Latency (ms)</th>
+      <th>Error Rate</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for day in daily_breakdown %}
+    <tr>
+      <td>{{ day.date }}</td>
+      <td>{{ day.requests | number }}</td>
+      <td>{{ day.tokens | number }}</td>
+      <td>{{ day.revenue | money("CRED") }}</td>
+      <td>{{ day.avg_latency }}</td>
+      <td>
+        {% if day.error_rate > 5 %}
+        <span class="badge badge-danger">{{ day.error_rate | pct }}</span>
+        {% elif day.error_rate > 1 %}
+        <span class="badge badge-warning">{{ day.error_rate | pct }}</span>
+        {% else %}
+        <span class="badge badge-success">{{ day.error_rate | pct }}</span>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<div class="info-box">No daily breakdown data available for this period.</div>
+{% endif %}
+
+<!-- ═══════════ RECENT TRANSACTIONS ═══════════ -->
+<div class="page-break"></div>
+<h2>3. Recent Transactions</h2>
+
+{% if recent_transactions %}
+<table>
+  <thead>
+    <tr>
+      <th>ID</th>
+      <th>User</th>
+      <th>Type</th>
+      <th>Model</th>
+      <th>Tokens</th>
+      <th>Amount</th>
+      <th>Status</th>
+      <th>Date</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for txn in recent_transactions[:50] %}
+    <tr>
+      <td style="font-family: monospace; font-size: 8pt;">{{ txn.id[:8] }}...</td>
+      <td>{{ txn.user[:20] }}</td>
+      <td>
+        {% if txn.txn_type == 'topup' %}
+        <span class="badge badge-success">Topup</span>
+        {% elif txn.txn_type == 'usage' %}
+        <span class="badge badge-info">Usage</span>
+        {% elif txn.txn_type == 'refund' %}
+        <span class="badge badge-warning">Refund</span>
+        {% else %}
+        <span class="badge">{{ txn.txn_type }}</span>
+        {% endif %}
+      </td>
+      <td>{{ txn.model }}</td>
+      <td>{{ txn.tokens | number }}</td>
+      <td>{{ txn.amount | money }}</td>
+      <td>
+        {% if txn.status == 'completed' %}
+        <span class="badge badge-success">✓</span>
+        {% else %}
+        <span class="badge badge-warning">⏳</span>
+        {% endif %}
+      </td>
+      <td style="font-size: 8pt;">{{ txn.created_at[:10] }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<div class="info-box">No transactions recorded in this period.</div>
+{% endif %}
+
+<!-- ═══════════ FOOTER NOTE ═══════════ -->
+<div style="margin-top: 36px; padding-top: 12px; border-top: 1px solid #e5e7eb; font-size: 7.5pt; color: #9ca3af;">
+  <p>This report was automatically generated by MaaS-Router Document Engine.</p>
+  <p>All amounts are in CRED unless otherwise noted. Data as of {{ now.strftime('%Y-%m-%d %H:%M UTC') }}.</p>
+</div>
+
+</body>
+</html>

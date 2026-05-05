@@ -4,8 +4,8 @@ import { Zap } from "lucide-react";
 import { authApi, setAuthToken } from "../services/api";
 
 export default function LoginPage() {
-  const [email, setEmail] = useState("admin@maas-router.com");
-  const [password, setPassword] = useState("admin123");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
@@ -53,7 +53,9 @@ export default function LoginPage() {
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
+              autoComplete="email"
               className="w-full bg-[#0a0a0f] border border-[#27272a] rounded-lg px-4 py-3 text-white placeholder-gray-600 focus:outline-none focus:border-purple-500 transition-colors"
+              placeholder="admin@example.com"
               required
             />
           </div>
@@ -64,7 +66,9 @@ export default function LoginPage() {
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
+              autoComplete="current-password"
               className="w-full bg-[#0a0a0f] border border-[#27272a] rounded-lg px-4 py-3 text-white placeholder-gray-600 focus:outline-none focus:border-purple-500 transition-colors"
+              placeholder="输入密码"
               required
             />
           </div>
@@ -76,10 +80,6 @@ export default function LoginPage() {
           >
             {loading ? "登录中..." : "登录"}
           </button>
-
-          <p className="text-xs text-gray-600 text-center">
-            演示账号: admin@maas-router.com / admin123
-          </p>
         </form>
       </div>
     </div>

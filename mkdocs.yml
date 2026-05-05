@@ -1,0 +1,103 @@
+site_name: MaaS-Router 技术文档
+site_description: AI 推理聚合网关 — 多供应商 AI 模型统一接入与智能路由平台
+site_author: MaaS-Router Team
+copyright: Copyright &copy; 2026 MaaS-Router Team
+
+repo_url: https://github.com/org/maas-router
+repo_name: maas-router
+edit_uri: edit/main/docs/
+
+theme:
+  name: material
+  language: zh
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/weather-sunny
+        name: 切换暗色模式
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/weather-night
+        name: 切换亮色模式
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - navigation.tabs
+    - navigation.sections
+    - navigation.expand
+    - navigation.indexes
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - search.share
+    - content.code.copy
+    - content.code.annotate
+  icon:
+    repo: fontawesome/brands/github
+
+plugins:
+  - search:
+      lang: zh
+
+markdown_extensions:
+  - abbr
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - md_in_html
+  - toc:
+      permalink: true
+      permalink_title: 锚点链接
+  - tables
+  - pymdownx.details
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - pymdownx.tasklist:
+      custom_checkbox: true
+
+nav:
+  - 首页: README.md
+  - 快速开始:
+      - 项目概览: OVERVIEW.md
+      - 开发环境搭建: DEVELOPMENT.md
+      - 文档导航: INDEX.md
+  - 架构设计:
+      - 系统架构: ARCHITECTURE.md
+      - 数据库设计: DATABASE.md
+      - 配置参考: CONFIGURATION.md
+  - API 参考:
+      - API 总览: API_REFERENCE.md
+  - 运维部署:
+      - 部署指南: DEPLOYMENT.md
+      - 故障排查: TROUBLESHOOTING.md
+  - 团队协作:
+      - Git 工作流: GIT_WORKFLOW.md
+      - 贡献指南: CONTRIBUTING.md
+      - 变更日志: CHANGELOG.md
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/org/maas-router
+  generator: false

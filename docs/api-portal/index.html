@@ -1,0 +1,2361 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI API Reference — Developer Documentation</title>
+<style>
+/* ============================================================
+   CSS Variables — Theme System
+   ============================================================ */
+:root {
+  /* Light Theme (fallback) */
+  --bg-primary: #ffffff;
+  --bg-secondary: #f7f8fa;
+  --bg-tertiary: #f0f2f5;
+  --bg-elevated: #ffffff;
+  --bg-overlay: rgba(0,0,0,0.04);
+  --text-primary: #061b31;
+  --text-secondary: #273951;
+  --text-tertiary: #64748d;
+  --text-muted: #94a3b8;
+  --border-default: #e5edf5;
+  --border-subtle: #f0f4f8;
+  --accent: #635BFF;
+  --accent-hover: #4F47E0;
+  --accent-soft: rgba(99,91,255,0.08);
+  --accent-gradient: linear-gradient(135deg, #635BFF 0%, #8B5CF6 50%, #A78BFA 100%);
+  --success: #15be53;
+  --success-bg: rgba(21,190,83,0.1);
+  --success-text: #108c3d;
+  --warning: #f59e0b;
+  --warning-bg: rgba(245,158,11,0.1);
+  --warning-text: #9b6829;
+  --error: #ea2261;
+  --error-bg: rgba(234,34,97,0.08);
+  --code-bg: #f5f7fa;
+  --code-text: #24292e;
+  --method-get: #15be53;
+  --method-post: #635BFF;
+  --method-put: #f59e0b;
+  --method-delete: #ea2261;
+  --method-patch: #8B5CF6;
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.04);
+  --shadow-md: rgba(50,50,93,0.08) 0px 6px 12px -2px, rgba(0,0,0,0.04) 0px 3px 7px -3px;
+  --shadow-lg: rgba(50,50,93,0.12) 0px 13px 27px -5px, rgba(0,0,0,0.06) 0px 8px 16px -8px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --sidebar-width: 260px;
+  --code-panel-width: 420px;
+  --header-height: 56px;
+  --font-mono: "SF Mono", "Fira Code", "Fira Mono", "Roboto Mono", "Consolas", "Monaco", monospace;
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+[data-theme="dark"] {
+  --bg-primary: #0d1117;
+  --bg-secondary: #131820;
+  --bg-tertiary: #1a1f2e;
+  --bg-elevated: #161b22;
+  --bg-overlay: rgba(255,255,255,0.03);
+  --text-primary: #e6edf3;
+  --text-secondary: #c9d1d9;
+  --text-tertiary: #8b949e;
+  --text-muted: #606a78;
+  --border-default: #21262d;
+  --border-subtle: #1a1f2e;
+  --accent-soft: rgba(99,91,255,0.12);
+  --accent-hover: #7C75FF;
+  --success-bg: rgba(21,190,83,0.12);
+  --warning-bg: rgba(245,158,11,0.12);
+  --error-bg: rgba(234,34,97,0.1);
+  --code-bg: #0d1117;
+  --code-text: #c9d1d9;
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.2);
+  --shadow-md: 0 4px 12px rgba(0,0,0,0.3);
+  --shadow-lg: 0 8px 24px rgba(0,0,0,0.4);
+}
+
+/* ============================================================
+   Reset & Base
+   ============================================================ */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html {
+  scroll-behavior: smooth;
+  scroll-padding-top: var(--header-height);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+  background: var(--bg-primary);
+  overflow-x: hidden;
+}
+
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+code, pre {
+  font-family: var(--font-mono);
+  font-size: 13px;
+}
+
+/* ============================================================
+   Header
+   ============================================================ */
+.header {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  height: var(--header-height);
+  background: var(--bg-primary);
+  border-bottom: 1px solid var(--border-default);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 24px;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.header-logo {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary);
+  letter-spacing: -0.3px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.header-logo-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  background: var(--accent-gradient);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.header-badge {
+  font-size: 11px;
+  font-weight: 500;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  letter-spacing: 0.3px;
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.theme-toggle {
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-default);
+  background: var(--bg-secondary);
+  color: var(--text-tertiary);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+  font-size: 16px;
+}
+.theme-toggle:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  border-color: var(--accent);
+}
+
+.mobile-menu-btn {
+  display: none;
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-default);
+  background: var(--bg-secondary);
+  color: var(--text-tertiary);
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+}
+
+/* ============================================================
+   Main Layout — Three Columns
+   ============================================================ */
+.app-layout {
+  display: grid;
+  grid-template-columns: var(--sidebar-width) 1fr var(--code-panel-width);
+  min-height: calc(100vh - var(--header-height));
+  max-width: 1600px;
+  margin: 0 auto;
+}
+
+/* ============================================================
+   Left Sidebar — Navigation
+   ============================================================ */
+.sidebar {
+  position: sticky;
+  top: var(--header-height);
+  height: calc(100vh - var(--header-height));
+  overflow-y: auto;
+  border-right: 1px solid var(--border-default);
+  background: var(--bg-primary);
+  padding: 24px 0;
+}
+
+.sidebar::-webkit-scrollbar { width: 4px; }
+.sidebar::-webkit-scrollbar-track { background: transparent; }
+.sidebar::-webkit-scrollbar-thumb { background: var(--border-default); border-radius: 4px; }
+
+.nav-section {
+  margin-bottom: 4px;
+}
+
+.nav-section-title {
+  padding: 6px 20px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--text-muted);
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 20px;
+  font-size: 13.5px;
+  font-weight: 450;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  transition: all 0.12s ease;
+  border-left: 2px solid transparent;
+  text-decoration: none;
+  position: relative;
+}
+
+.nav-item:hover {
+  color: var(--text-primary);
+  background: var(--bg-overlay);
+  text-decoration: none;
+}
+
+.nav-item.active {
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-left-color: var(--accent);
+  font-weight: 500;
+}
+
+.nav-item-icon {
+  font-size: 13px;
+  opacity: 0.6;
+  width: 18px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.nav-item.active .nav-item-icon { opacity: 1; }
+
+.nav-badge {
+  margin-left: auto;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 3px;
+  letter-spacing: 0.3px;
+}
+
+.nav-badge.post { background: var(--accent-soft); color: var(--accent); }
+.nav-badge.get  { background: var(--success-bg); color: var(--success-text); }
+
+.nav-spacer {
+  height: 12px;
+}
+
+/* ============================================================
+   Main Content Area
+   ============================================================ */
+.content {
+  padding: 40px 48px;
+  max-width: 820px;
+  overflow-y: auto;
+}
+
+.content::-webkit-scrollbar { width: 4px; }
+.content::-webkit-scrollbar-track { background: transparent; }
+.content::-webkit-scrollbar-thumb { background: var(--border-default); border-radius: 4px; }
+
+/* Section styling */
+.doc-section {
+  margin-bottom: 56px;
+}
+
+.section-anchor {
+  scroll-margin-top: calc(var(--header-height) + 24px);
+}
+
+.section-title {
+  font-size: 28px;
+  font-weight: 300;
+  color: var(--text-primary);
+  letter-spacing: -0.5px;
+  margin-bottom: 8px;
+  line-height: 1.2;
+}
+
+.section-subtitle {
+  font-size: 20px;
+  font-weight: 400;
+  color: var(--text-primary);
+  letter-spacing: -0.3px;
+  margin-bottom: 8px;
+  line-height: 1.3;
+  margin-top: 32px;
+}
+
+.section-description {
+  font-size: 15px;
+  color: var(--text-tertiary);
+  line-height: 1.7;
+  margin-bottom: 20px;
+  max-width: 65ch;
+}
+
+/* Endpoint card */
+.endpoint-card {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  margin-bottom: 32px;
+  transition: border-color 0.15s ease;
+}
+
+.endpoint-card:hover {
+  border-color: var(--accent);
+  box-shadow: var(--shadow-md);
+}
+
+.endpoint-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.endpoint-method {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: var(--radius-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  line-height: 1;
+}
+
+.method-get    { background: var(--success-bg); color: var(--success-text); }
+.method-post   { background: var(--accent-soft); color: var(--accent); }
+.method-put    { background: var(--warning-bg); color: var(--warning-text); }
+.method-delete { background: var(--error-bg); color: var(--error); }
+.method-patch  { background: rgba(139,92,246,0.1); color: #7c3aed; }
+
+.endpoint-path {
+  font-family: var(--font-mono);
+  font-size: 13.5px;
+  font-weight: 500;
+  color: var(--text-primary);
+  letter-spacing: -0.2px;
+}
+
+.endpoint-body {
+  padding: 20px;
+}
+
+.endpoint-desc {
+  font-size: 14px;
+  color: var(--text-tertiary);
+  margin-bottom: 20px;
+  line-height: 1.6;
+}
+
+/* Parameter table */
+.param-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  margin-bottom: 20px;
+}
+
+.param-table thead th {
+  text-align: left;
+  padding: 8px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border-default);
+  background: var(--bg-overlay);
+}
+
+.param-table tbody td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border-subtle);
+  vertical-align: top;
+  line-height: 1.5;
+}
+
+.param-table tbody tr:last-child td { border-bottom: none; }
+
+.param-table tbody tr:hover td {
+  background: var(--bg-overlay);
+}
+
+.param-name {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.param-type {
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--accent);
+  background: var(--accent-soft);
+  padding: 1px 6px;
+  border-radius: 3px;
+  white-space: nowrap;
+}
+
+.param-required {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--error);
+  background: var(--error-bg);
+  padding: 1px 6px;
+  border-radius: 3px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  margin-left: 6px;
+}
+
+.param-optional {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--text-muted);
+  padding: 1px 6px;
+  border-radius: 3px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  margin-left: 6px;
+}
+
+.param-desc {
+  color: var(--text-tertiary);
+  font-size: 13px;
+}
+
+/* Response block */
+.response-block {
+  margin-top: 16px;
+}
+
+.response-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Info callout */
+.callout {
+  padding: 14px 18px;
+  border-radius: var(--radius-md);
+  font-size: 13.5px;
+  line-height: 1.6;
+  margin-bottom: 20px;
+  display: flex;
+  gap: 10px;
+}
+
+.callout-info {
+  background: var(--accent-soft);
+  border: 1px solid rgba(99,91,255,0.2);
+  color: var(--text-secondary);
+}
+
+.callout-warning {
+  background: var(--warning-bg);
+  border: 1px solid rgba(245,158,11,0.25);
+  color: var(--text-secondary);
+}
+
+.callout-icon { flex-shrink: 0; font-size: 14px; }
+
+/* Error codes table */
+.error-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  margin-bottom: 20px;
+}
+
+.error-table th {
+  text-align: left;
+  padding: 10px 14px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border-default);
+  background: var(--bg-overlay);
+}
+
+.error-table td {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border-subtle);
+  line-height: 1.5;
+}
+
+.error-table tbody tr:hover td { background: var(--bg-overlay); }
+
+.error-code {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 13px;
+}
+
+.error-code.e400 { color: var(--warning); }
+.error-code.e401 { color: var(--error); }
+.error-code.e403 { color: var(--error); }
+.error-code.e404 { color: var(--warning); }
+.error-code.e429 { color: var(--warning); }
+.error-code.e500 { color: var(--error); }
+
+/* Base URL badge */
+.base-url {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--text-primary);
+  margin-bottom: 20px;
+}
+
+.base-url-icon {
+  color: var(--success);
+  font-size: 10px;
+}
+
+/* Divider */
+.section-divider {
+  border: none;
+  border-top: 1px solid var(--border-default);
+  margin: 40px 0;
+}
+
+/* ============================================================
+   Right Code Panel
+   ============================================================ */
+.code-panel {
+  position: sticky;
+  top: var(--header-height);
+  height: calc(100vh - var(--header-height));
+  overflow-y: auto;
+  border-left: 1px solid var(--border-default);
+  background: var(--bg-secondary);
+}
+
+.code-panel::-webkit-scrollbar { width: 4px; }
+.code-panel::-webkit-scrollbar-track { background: transparent; }
+.code-panel::-webkit-scrollbar-thumb { background: var(--border-default); border-radius: 4px; }
+
+.code-panel-inner {
+  padding: 20px;
+}
+
+.code-panel-title {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--text-muted);
+  margin-bottom: 16px;
+}
+
+/* Language tabs */
+.code-tabs {
+  display: flex;
+  gap: 2px;
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-md);
+  padding: 3px;
+  margin-bottom: 12px;
+}
+
+.code-tab {
+  flex: 1;
+  padding: 6px 12px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 500;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.12s ease;
+  font-family: var(--font-sans);
+  text-align: center;
+}
+
+.code-tab:hover { color: var(--text-secondary); }
+
+.code-tab.active {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+  font-weight: 600;
+  box-shadow: var(--shadow-sm);
+}
+
+/* Code block */
+.code-block-wrapper {
+  position: relative;
+  background: var(--code-bg);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  margin-bottom: 16px;
+}
+
+.code-block-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-overlay);
+}
+
+.code-block-lang {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
+}
+
+.copy-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elevated);
+  color: var(--text-tertiary);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.12s ease;
+  font-family: var(--font-sans);
+}
+
+.copy-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.copy-btn.copied {
+  border-color: var(--success);
+  color: var(--success-text);
+  background: var(--success-bg);
+}
+
+.code-block {
+  padding: 16px;
+  overflow-x: auto;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  line-height: 1.65;
+  color: var(--code-text);
+  white-space: pre;
+  tab-size: 2;
+}
+
+.code-block::-webkit-scrollbar { height: 4px; }
+.code-block::-webkit-scrollbar-track { background: transparent; }
+.code-block::-webkit-scrollbar-thumb { background: var(--border-default); border-radius: 4px; }
+
+/* JSON response block */
+.json-response {
+  background: var(--code-bg);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.json-response-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-overlay);
+}
+
+.json-response-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-muted);
+}
+
+.json-response .code-block {
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+/* ============================================================
+   Syntax Highlighting
+   ============================================================ */
+.syn-kw   { color: #d73a49; font-weight: 600; }        /* keywords */
+.syn-str  { color: #032f62; }                            /* strings */
+.syn-num  { color: #005cc5; }                            /* numbers */
+.syn-cm   { color: #6a737d; font-style: italic; }        /* comments */
+.syn-fn   { color: #6f42c1; }                            /* functions */
+.syn-op   { color: #d73a49; }                            /* operators */
+.syn-type { color: #e36209; }                            /* types */
+.syn-builtin { color: #005cc5; }                         /* builtins */
+
+[data-theme="dark"] .syn-kw   { color: #ff7b72; }
+[data-theme="dark"] .syn-str  { color: #a5d6ff; }
+[data-theme="dark"] .syn-num  { color: #79c0ff; }
+[data-theme="dark"] .syn-cm   { color: #8b949e; }
+[data-theme="dark"] .syn-fn   { color: #d2a8ff; }
+[data-theme="dark"] .syn-op   { color: #ff7b72; }
+[data-theme="dark"] .syn-type { color: #ffa657; }
+[data-theme="dark"] .syn-builtin { color: #79c0ff; }
+
+/* JSON syntax */
+.json-key   { color: var(--accent); }
+.json-str   { color: var(--success); }
+.json-num   { color: #79c0ff; }
+.json-bool  { color: #ff7b72; }
+.json-null  { color: #8b949e; }
+
+[data-theme="light"] .json-key   { color: #6f42c1; }
+[data-theme="light"] .json-str   { color: #032f62; }
+[data-theme="light"] .json-num   { color: #005cc5; }
+[data-theme="light"] .json-bool  { color: #d73a49; }
+
+/* ============================================================
+   Responsive
+   ============================================================ */
+@media (max-width: 1280px) {
+  .app-layout {
+    grid-template-columns: var(--sidebar-width) 1fr;
+  }
+  .code-panel {
+    display: none;
+  }
+  .code-panel.mobile-visible {
+    display: block;
+    position: static;
+    height: auto;
+    border-left: none;
+    border-top: 1px solid var(--border-default);
+  }
+  .endpoint-card .code-panel-inline {
+    display: block;
+  }
+}
+
+@media (max-width: 860px) {
+  .app-layout {
+    grid-template-columns: 1fr;
+  }
+  .sidebar {
+    position: fixed;
+    top: var(--header-height);
+    left: 0;
+    width: var(--sidebar-width);
+    height: calc(100vh - var(--header-height));
+    z-index: 90;
+    transform: translateX(-100%);
+    transition: transform 0.2s ease;
+    box-shadow: var(--shadow-lg);
+  }
+  .sidebar.open {
+    transform: translateX(0);
+  }
+  .sidebar-overlay {
+    display: none;
+    position: fixed;
+    top: var(--header-height);
+    left: 0;
+    width: 100%;
+    height: calc(100vh - var(--header-height));
+    background: rgba(0,0,0,0.4);
+    z-index: 89;
+  }
+  .sidebar-overlay.visible { display: block; }
+  .mobile-menu-btn { display: flex; }
+  .content { padding: 28px 20px; }
+  .section-title { font-size: 24px; }
+  .section-subtitle { font-size: 18px; }
+  .param-table { font-size: 12px; }
+  .param-table thead th,
+  .param-table tbody td { padding: 6px 8px; }
+}
+
+@media (max-width: 480px) {
+  .content { padding: 20px 14px; }
+  .section-title { font-size: 22px; }
+  .endpoint-header { flex-wrap: wrap; gap: 6px; }
+  .endpoint-path { font-size: 12px; word-break: break-all; }
+}
+
+/* ============================================================
+   Utility: Inline code panels for responsive
+   ============================================================ */
+.code-panel-inline {
+  display: none;
+  margin-top: 12px;
+}
+
+@media (max-width: 1280px) {
+  .code-panel-inline { display: block; }
+}
+
+/* ============================================================
+   Sidebar Overlay
+   ============================================================ */
+.sidebar-overlay {
+  display: none;
+}
+
+/* ============================================================
+   Footer
+   ============================================================ */
+.doc-footer {
+  margin-top: 56px;
+  padding-top: 24px;
+  border-top: 1px solid var(--border-default);
+  font-size: 12px;
+  color: var(--text-muted);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+/* ============================================================
+   Animations
+   ============================================================ */
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.endpoint-card {
+  animation: fadeInUp 0.35s ease both;
+}
+
+.endpoint-card:nth-child(2) { animation-delay: 0.05s; }
+.endpoint-card:nth-child(3) { animation-delay: 0.1s; }
+.endpoint-card:nth-child(4) { animation-delay: 0.15s; }
+
+@media (prefers-reduced-motion: reduce) {
+  .endpoint-card { animation: none; }
+  html { scroll-behavior: auto; }
+}
+
+/* Active nav indicator pulse */
+@keyframes navPulse {
+  0%, 100% { border-left-color: var(--accent); }
+  50% { border-left-color: rgba(99,91,255,0.3); }
+}
+
+.nav-item.active {
+  animation: navPulse 2s ease-in-out infinite;
+}
+
+/* ============================================================
+   Print styles
+   ============================================================ */
+@media print {
+  .sidebar, .code-panel, .header { display: none; }
+  .app-layout { display: block; }
+  .content { max-width: 100%; padding: 0; }
+}
+</style>
+</head>
+<body>
+
+<!-- ============================================================
+     Header
+     ============================================================ -->
+<header class="header">
+  <div class="header-left">
+    <div class="header-logo">
+      <span class="header-logo-icon">AI</span>
+      API Reference
+    </div>
+    <span class="header-badge">v2.1</span>
+  </div>
+  <div class="header-right">
+    <button class="theme-toggle" id="themeToggle" aria-label="Toggle theme" title="Toggle dark/light mode">
+      ☀
+    </button>
+    <button class="mobile-menu-btn" id="mobileMenuBtn" aria-label="Toggle menu">
+      ☰
+    </button>
+  </div>
+</header>
+
+<div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+<!-- ============================================================
+     Main Layout
+     ============================================================ -->
+<div class="app-layout">
+
+  <!-- Left Sidebar -->
+  <nav class="sidebar" id="sidebar">
+    <div class="nav-section">
+      <div class="nav-section-title">Getting Started</div>
+      <a href="#introduction" class="nav-item active" data-section="introduction">
+        <span class="nav-item-icon">◆</span> Introduction
+      </a>
+      <a href="#authentication" class="nav-item" data-section="authentication">
+        <span class="nav-item-icon">🔑</span> Authentication
+      </a>
+    </div>
+
+    <div class="nav-spacer"></div>
+
+    <div class="nav-section">
+      <div class="nav-section-title">API Endpoints</div>
+      <a href="#chat-completions" class="nav-item" data-section="chat-completions">
+        <span class="nav-item-icon">▼</span> Chat Completions
+        <span class="nav-badge post">POST</span>
+      </a>
+      <a href="#models" class="nav-item" data-section="models">
+        <span class="nav-item-icon">▼</span> Models
+        <span class="nav-badge get">GET</span>
+      </a>
+    </div>
+
+    <div class="nav-spacer"></div>
+
+    <div class="nav-section">
+      <div class="nav-section-title">Reference</div>
+      <a href="#error-handling" class="nav-item" data-section="error-handling">
+        <span class="nav-item-icon">⚠</span> Error Handling
+      </a>
+    </div>
+  </nav>
+
+  <!-- Main Content -->
+  <main class="content" id="mainContent">
+
+    <!-- ========== SECTION: Introduction ========== -->
+    <section class="doc-section section-anchor" id="introduction">
+      <h1 class="section-title">Introduction</h1>
+      <p class="section-description">
+        Welcome to the AI API — a powerful REST interface for integrating state-of-the-art
+        language models into your applications. Build chat-based assistants, generate content,
+        analyze text, and more with a simple, consistent API.
+      </p>
+
+      <div class="base-url">
+        <span class="base-url-icon">●</span>
+        https://api.ai-service.com/v1
+      </div>
+
+      <div class="callout callout-info">
+        <span class="callout-icon">ℹ</span>
+        <div>
+          <strong>Quick Start</strong><br>
+          All API requests must be made over HTTPS. Requests over plain HTTP will be rejected.
+          The API accepts JSON request bodies and returns JSON-encoded responses with standard
+          HTTP status codes. Authentication is handled via Bearer tokens in the
+          <code style="font-family:var(--font-mono);font-size:12px;background:var(--bg-overlay);padding:1px 5px;border-radius:3px;">Authorization</code> header.
+        </div>
+      </div>
+    </section>
+
+    <!-- ========== SECTION: Authentication ========== -->
+    <section class="doc-section section-anchor" id="authentication">
+      <h2 class="section-title">Authentication</h2>
+      <p class="section-description">
+        The AI API uses API keys to authenticate requests. You can generate and manage your
+        API keys from the <a href="#">dashboard</a>. All API requests must include your key
+        in the <code style="font-family:var(--font-mono);font-size:12px;background:var(--bg-overlay);padding:1px 5px;border-radius:3px;">Authorization</code> header.
+      </p>
+
+      <h3 class="section-subtitle">Bearer Token</h3>
+      <p class="section-description">
+        Include your API key as a Bearer token in every request:
+      </p>
+
+      <div class="endpoint-card">
+        <div class="endpoint-header">
+          <span class="endpoint-method method-post">Header</span>
+          <span class="endpoint-path">Authorization: Bearer &lt;your-api-key&gt;</span>
+        </div>
+        <div class="endpoint-body">
+          <p class="endpoint-desc">
+            Replace <code style="font-family:var(--font-mono);font-size:12px;background:var(--bg-overlay);padding:1px 5px;border-radius:3px;">&lt;your-api-key&gt;</code>
+            with your actual API key. Keep your key secret — do not expose it in client-side
+            code or public repositories.
+          </p>
+
+          <div class="callout callout-warning">
+            <span class="callout-icon">⚠</span>
+            <div>
+              <strong>Security Best Practice</strong><br>
+              Store API keys in environment variables or a secure secrets manager.
+              Never commit them to version control. If a key is compromised, revoke it
+              immediately from the dashboard and generate a new one.
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========== SECTION: Chat Completions ========== -->
+    <section class="doc-section section-anchor" id="chat-completions">
+      <h2 class="section-title">Chat Completions</h2>
+      <p class="section-description">
+        Create a model response for a given chat conversation. This is the primary endpoint
+        for interacting with language models — send a list of messages and receive a generated
+        completion in return.
+      </p>
+
+      <!-- POST /v1/chat/completions -->
+      <div class="endpoint-card">
+        <div class="endpoint-header">
+          <span class="endpoint-method method-post">POST</span>
+          <span class="endpoint-path">/v1/chat/completions</span>
+        </div>
+        <div class="endpoint-body">
+          <p class="endpoint-desc">
+            Generates a model response for the given conversation. The model will process
+            the message history and return a coherent completion that continues the dialogue.
+          </p>
+
+          <div class="response-label">Request Parameters</div>
+          <table class="param-table">
+            <thead>
+              <tr>
+                <th>Parameter</th>
+                <th>Type</th>
+                <th>Description</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>
+                  <span class="param-name">model</span>
+                  <span class="param-required">required</span>
+                </td>
+                <td><span class="param-type">string</span></td>
+                <td class="param-desc">ID of the model to use. See the <a href="#models">Models</a> section for available models.</td>
+              </tr>
+              <tr>
+                <td>
+                  <span class="param-name">messages</span>
+                  <span class="param-required">required</span>
+                </td>
+                <td><span class="param-type">array</span></td>
+                <td class="param-desc">A list of messages comprising the conversation so far. Each message has a <code>role</code> (<code>system</code>, <code>user</code>, <code>assistant</code>) and <code>content</code>.</td>
+              </tr>
+              <tr>
+                <td>
+                  <span class="param-name">temperature</span>
+                  <span class="param-optional">optional</span>
+                </td>
+                <td><span class="param-type">number</span></td>
+                <td class="param-desc">Sampling temperature between 0 and 2. Higher values produce more random outputs. <strong>Default: 1</strong></td>
+              </tr>
+              <tr>
+                <td>
+                  <span class="param-name">max_tokens</span>
+                  <span class="param-optional">optional</span>
+                </td>
+                <td><span class="param-type">integer</span></td>
+                <td class="param-desc">The maximum number of tokens to generate in the completion. <strong>Default: model maximum</strong></td>
+              </tr>
+              <tr>
+                <td>
+                  <span class="param-name">top_p</span>
+                  <span class="param-optional">optional</span>
+                </td>
+                <td><span class="param-type">number</span></td>
+                <td class="param-desc">Nucleus sampling parameter. Only tokens with cumulative probability above this threshold are considered. <strong>Default: 1</strong></td>
+              </tr>
+              <tr>
+                <td>
+                  <span class="param-name">stream</span>
+                  <span class="param-optional">optional</span>
+                </td>
+                <td><span class="param-type">boolean</span></td>
+                <td class="param-desc">If <code>true</code>, the response is streamed as server-sent events (SSE). <strong>Default: false</strong></td>
+              </tr>
+              <tr>
+                <td>
+                  <span class="param-name">stop</span>
+                  <span class="param-optional">optional</span>
+                </td>
+                <td><span class="param-type">string | array</span></td>
+                <td class="param-desc">Up to 4 sequences where the API will stop generating further tokens.</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <div class="response-block">
+            <div class="response-label">Response</div>
+            <p class="endpoint-desc">
+              Returns a <code style="font-family:var(--font-mono);font-size:12px;background:var(--bg-overlay);padding:1px 5px;border-radius:3px;">200 OK</code>
+              with a JSON object containing the generated completion and usage metadata.
+            </p>
+          </div>
+
+          <!-- Inline code panels for responsive -->
+          <div class="code-panel-inline">
+            <!-- content duplicated from right panel via JS -->
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========== SECTION: Models ========== -->
+    <section class="doc-section section-anchor" id="models">
+      <h2 class="section-title">Models</h2>
+      <p class="section-description">
+        List and describe the available language models. Use these endpoints to discover
+        which models are available for chat completions and their capabilities.
+      </p>
+
+      <!-- GET /v1/models -->
+      <div class="endpoint-card">
+        <div class="endpoint-header">
+          <span class="endpoint-method method-get">GET</span>
+          <span class="endpoint-path">/v1/models</span>
+        </div>
+        <div class="endpoint-body">
+          <p class="endpoint-desc">
+            Lists all currently available models, and provides basic information about each
+            one such as the owner and availability.
+          </p>
+
+          <div class="response-label">Response</div>
+          <p class="endpoint-desc">
+            Returns a <code style="font-family:var(--font-mono);font-size:12px;background:var(--bg-overlay);padding:1px 5px;border-radius:3px;">200 OK</code>
+            with a JSON object containing a <code>data</code> array of model objects.
+          </p>
+
+          <div class="code-panel-inline"></div>
+        </div>
+      </div>
+
+      <!-- GET /v1/models/{model_id} -->
+      <div class="endpoint-card">
+        <div class="endpoint-header">
+          <span class="endpoint-method method-get">GET</span>
+          <span class="endpoint-path">/v1/models/{model_id}</span>
+        </div>
+        <div class="endpoint-body">
+          <p class="endpoint-desc">
+            Retrieves detailed information about a specific model, including its capabilities,
+            token limits, and pricing tier.
+          </p>
+
+          <table class="param-table">
+            <thead>
+              <tr>
+                <th>Parameter</th>
+                <th>Type</th>
+                <th>Description</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>
+                  <span class="param-name">model_id</span>
+                  <span class="param-required">required</span>
+                </td>
+                <td><span class="param-type">string</span></td>
+                <td class="param-desc">The ID of the model to retrieve (path parameter). Example: <code>gpt-4o</code></td>
+              </tr>
+            </tbody>
+          </table>
+
+          <div class="code-panel-inline"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========== SECTION: Error Handling ========== -->
+    <section class="doc-section section-anchor" id="error-handling">
+      <h2 class="section-title">Error Handling</h2>
+      <p class="section-description">
+        The API uses conventional HTTP response codes to indicate the success or failure of
+        a request. Errors return a JSON object with a machine-readable <code>type</code> and
+        a human-readable <code>message</code>.
+      </p>
+
+      <h3 class="section-subtitle">Error Response Format</h3>
+      <p class="section-description">
+        All error responses follow a consistent structure:
+      </p>
+
+      <div class="endpoint-card">
+        <div class="endpoint-header">
+          <span class="endpoint-method method-delete">ERROR</span>
+          <span class="endpoint-path">Response Structure</span>
+        </div>
+        <div class="endpoint-body">
+          <table class="param-table">
+            <thead>
+              <tr>
+                <th>Field</th>
+                <th>Type</th>
+                <th>Description</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><span class="param-name">error.type</span></td>
+                <td><span class="param-type">string</span></td>
+                <td class="param-desc">A machine-readable error type identifier (e.g. <code>invalid_request_error</code>, <code>authentication_error</code>).</td>
+              </tr>
+              <tr>
+                <td><span class="param-name">error.message</span></td>
+                <td><span class="param-type">string</span></td>
+                <td class="param-desc">A human-readable description of the error, suitable for display to developers.</td>
+              </tr>
+              <tr>
+                <td><span class="param-name">error.code</span></td>
+                <td><span class="param-type">string | null</span></td>
+                <td class="param-desc">An optional machine-readable error code for programmatic handling (e.g. <code>context_length_exceeded</code>).</td>
+              </tr>
+              <tr>
+                <td><span class="param-name">error.param</span></td>
+                <td><span class="param-type">string | null</span></td>
+                <td class="param-desc">For parameter-related errors, the name of the parameter that caused the error.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Error Codes Table -->
+      <h3 class="section-subtitle">HTTP Status Codes</h3>
+      <table class="error-table">
+        <thead>
+          <tr>
+            <th>Status</th>
+            <th>Type</th>
+            <th>Description</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="error-code e400">400</span></td>
+            <td style="color:var(--text-secondary);font-weight:500;">Bad Request</td>
+            <td style="color:var(--text-tertiary);">Invalid request parameters, missing required fields, or malformed JSON.</td>
+          </tr>
+          <tr>
+            <td><span class="error-code e401">401</span></td>
+            <td style="color:var(--text-secondary);font-weight:500;">Unauthorized</td>
+            <td style="color:var(--text-tertiary);">Missing or invalid API key. Check the <code>Authorization</code> header.</td>
+          </tr>
+          <tr>
+            <td><span class="error-code e403">403</span></td>
+            <td style="color:var(--text-secondary);font-weight:500;">Forbidden</td>
+            <td style="color:var(--text-tertiary);">Your API key does not have permission to access the requested resource.</td>
+          </tr>
+          <tr>
+            <td><span class="error-code e404">404</span></td>
+            <td style="color:var(--text-secondary);font-weight:500;">Not Found</td>
+            <td style="color:var(--text-tertiary);">The requested endpoint or model does not exist.</td>
+          </tr>
+          <tr>
+            <td><span class="error-code e429">429</span></td>
+            <td style="color:var(--text-secondary);font-weight:500;">Rate Limit</td>
+            <td style="color:var(--text-tertiary);">Too many requests. Check the <code>Retry-After</code> header and implement exponential backoff.</td>
+          </tr>
+          <tr>
+            <td><span class="error-code e500">500</span></td>
+            <td style="color:var(--text-secondary);font-weight:500;">Internal Error</td>
+            <td style="color:var(--text-tertiary);">An unexpected server error occurred. Retry with exponential backoff.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="callout callout-info">
+        <span class="callout-icon">ℹ</span>
+        <div>
+          <strong>Retry Strategy</strong><br>
+          For <code>429</code> and <code>5xx</code> errors, implement exponential backoff:
+          start with a 1-second delay and double it after each retry, up to a maximum of
+          5 retries. Use jitter to avoid thundering herd problems.
+        </div>
+      </div>
+    </section>
+
+    <hr class="section-divider">
+
+    <footer class="doc-footer">
+      <span>AI API Reference — v2.1</span>
+      <span>Last updated: May 2026</span>
+    </footer>
+  </main>
+
+  <!-- Right Code Panel -->
+  <aside class="code-panel" id="codePanel">
+    <div class="code-panel-inner">
+      <div class="code-panel-title">Code Examples</div>
+
+      <!-- Section: Authentication -->
+      <div class="code-section" data-code-section="authentication" style="display:none;">
+        <div class="code-tabs">
+          <button class="code-tab active" data-lang="python">Python</button>
+          <button class="code-tab" data-lang="javascript">JavaScript</button>
+          <button class="code-tab" data-lang="curl">cURL</button>
+        </div>
+
+        <div class="code-block-wrapper" data-code="python">
+          <div class="code-block-header">
+            <span class="code-block-lang">Python</span>
+            <button class="copy-btn" data-copy-target="auth-py">📋 Copy</button>
+          </div>
+          <pre class="code-block" id="auth-py"><code>import requests
+
+API_KEY = "sk-your-api-key-here"
+BASE_URL = "https://api.ai-service.com/v1"
+
+headers = {
+    "Authorization": f"Bearer {API_KEY}",
+    "Content-Type": "application/json"
+}
+
+response = requests.get(
+    f"{BASE_URL}/models",
+    headers=headers
+)
+
+print(response.json())</code></pre>
+        </div>
+
+        <div class="code-block-wrapper" data-code="javascript" style="display:none;">
+          <div class="code-block-header">
+            <span class="code-block-lang">JavaScript</span>
+            <button class="copy-btn" data-copy-target="auth-js">📋 Copy</button>
+          </div>
+          <pre class="code-block" id="auth-js"><code>const API_KEY = "sk-your-api-key-here";
+const BASE_URL = "https://api.ai-service.com/v1";
+
+const headers = {
+  "Authorization": `Bearer ${API_KEY}`,
+  "Content-Type": "application/json"
+};
+
+const response = await fetch(
+  `${BASE_URL}/models`,
+  { headers }
+);
+
+const data = await response.json();
+console.log(data);</code></pre>
+        </div>
+
+        <div class="code-block-wrapper" data-code="curl" style="display:none;">
+          <div class="code-block-header">
+            <span class="code-block-lang">cURL</span>
+            <button class="copy-btn" data-copy-target="auth-curl">📋 Copy</button>
+          </div>
+          <pre class="code-block" id="auth-curl"><code>curl https://api.ai-service.com/v1/models \
+  -H "Authorization: Bearer sk-your-api-key-here" \
+  -H "Content-Type: application/json"</code></pre>
+        </div>
+      </div>
+
+      <!-- Section: Chat Completions -->
+      <div class="code-section" data-code-section="chat-completions" style="display:none;">
+        <div class="code-tabs">
+          <button class="code-tab active" data-lang="python">Python</button>
+          <button class="code-tab" data-lang="javascript">JavaScript</button>
+          <button class="code-tab" data-lang="curl">cURL</button>
+        </div>
+
+        <div class="code-block-wrapper" data-code="python">
+          <div class="code-block-header">
+            <span class="code-block-lang">Python</span>
+            <button class="copy-btn" data-copy-target="chat-py">📋 Copy</button>
+          </div>
+          <pre class="code-block" id="chat-py"><code>import requests
+
+API_KEY = "sk-your-api-key-here"
+BASE_URL = "https://api.ai-service.com/v1"
+
+response = requests.post(
+    f"{BASE_URL}/chat/completions",
+    headers={
+        "Authorization": f"Bearer {API_KEY}",
+        "Content-Type": "application/json"
+    },
+    json={
+        "model": "gpt-4o",
+        "messages": [
+            {"role": "system", "content": "You are a helpful assistant."},
+            {"role": "user", "content": "Explain quantum computing in simple terms."}
+        ],
+        "temperature": 0.7,
+        "max_tokens": 500
+    }
+)
+
+result = response.json()
+print(result["choices"][0]["message"]["content"])</code></pre>
+        </div>
+
+        <div class="code-block-wrapper" data-code="javascript" style="display:none;">
+          <div class="code-block-header">
+            <span class="code-block-lang">JavaScript</span>
+            <button class="copy-btn" data-copy-target="chat-js">📋 Copy</button>
+          </div>
+          <pre class="code-block" id="chat-js"><code>const API_KEY = "sk-your-api-key-here";
+const BASE_URL = "https://api.ai-service.com/v1";
+
+const response = await fetch(
+  `${BASE_URL}/chat/completions`,
+  {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${API_KEY}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      model: "gpt-4o",
+      messages: [
+        { role: "system", content: "You are a helpful assistant." },
+        { role: "user", content: "Explain quantum computing in simple terms." }
+      ],
+      temperature: 0.7,
+      max_tokens: 500
+    })
+  }
+);
+
+const result = await response.json();
+console.log(result.choices[0].message.content);</code></pre>
+        </div>
+
+        <div class="code-block-wrapper" data-code="curl" style="display:none;">
+          <div class="code-block-header">
+            <span class="code-block-lang">cURL</span>
+            <button class="copy-btn" data-copy-target="chat-curl">📋 Copy</button>
+          </div>
+          <pre class="code-block" id="chat-curl"><code>curl https://api.ai-service.com/v1/chat/completions \
+  -H "Authorization: Bearer sk-your-api-key-here" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gpt-4o",
+    "messages": [
+      {"role": "system", "content": "You are a helpful assistant."},
+      {"role": "user", "content": "Explain quantum computing in simple terms."}
+    ],
+    "temperature": 0.7,
+    "max_tokens": 500
+  }'</code></pre>
+        </div>
+
+        <!-- JSON Response Example -->
+        <div class="json-response">
+          <div class="json-response-header">
+            <span class="json-response-label">Response (200 OK)</span>
+            <button class="copy-btn" data-copy-target="chat-resp">📋 Copy</button>
+          </div>
+          <pre class="code-block" id="chat-resp"><code>{
+  "id": "chatcmpl-9xK3nN2pQmR7vW5sY8tZ",
+  "object": "chat.completion",
+  "created": 1716000000,
+  "model": "gpt-4o-2024-05-13",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "Quantum computing uses qubits instead of bits..."
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 35,
+    "completion_tokens": 128,
+    "total_tokens": 163
+  }
+}</code></pre>
+        </div>
+      </div>
+
+      <!-- Section: Models -->
+      <div class="code-section" data-code-section="models" style="display:none;">
+        <div class="code-tabs">
+          <button class="code-tab active" data-lang="python">Python</button>
+          <button class="code-tab" data-lang="javascript">JavaScript</button>
+          <button class="code-tab" data-lang="curl">cURL</button>
+        </div>
+
+        <div class="code-block-wrapper" data-code="python">
+          <div class="code-block-header">
+            <span class="code-block-lang">Python</span>
+            <button class="copy-btn" data-copy-target="models-py">📋 Copy</button>
+          </div>
+          <pre class="code-block" id="models-py"><code>import requests
+
+API_KEY = "sk-your-api-key-here"
+BASE_URL = "https://api.ai-service.com/v1"
+
+# List all available models
+response = requests.get(
+    f"{BASE_URL}/models",
+    headers={
+        "Authorization": f"Bearer {API_KEY}"
+    }
+)
+
+models = response.json()
+for model in models["data"]:
+    print(f"{model['id']} — owned by {model['owned_by']}")
+
+# Get a specific model
+response = requests.get(
+    f"{BASE_URL}/models/gpt-4o",
+    headers={
+        "Authorization": f"Bearer {API_KEY}"
+    }
+)
+
+details = response.json()
+print(details)</code></pre>
+        </div>
+
+        <div class="code-block-wrapper" data-code="javascript" style="display:none;">
+          <div class="code-block-header">
+            <span class="code-block-lang">JavaScript</span>
+            <button class="copy-btn" data-copy-target="models-js">📋 Copy</button>
+          </div>
+          <pre class="code-block" id="models-js"><code>const API_KEY = "sk-your-api-key-here";
+const BASE_URL = "https://api.ai-service.com/v1";
+
+// List all available models
+const listRes = await fetch(
+  `${BASE_URL}/models`,
+  { headers: { "Authorization": `Bearer ${API_KEY}` } }
+);
+const models = await listRes.json();
+models.data.forEach(m => 
+  console.log(`${m.id} — owned by ${m.owned_by}`)
+);
+
+// Get a specific model
+const detailRes = await fetch(
+  `${BASE_URL}/models/gpt-4o`,
+  { headers: { "Authorization": `Bearer ${API_KEY}` } }
+);
+console.log(await detailRes.json());</code></pre>
+        </div>
+
+        <div class="code-block-wrapper" data-code="curl" style="display:none;">
+          <div class="code-block-header">
+            <span class="code-block-lang">cURL</span>
+            <button class="copy-btn" data-copy-target="models-curl">📋 Copy</button>
+          </div>
+          <pre class="code-block" id="models-curl"><code># List all available models
+curl https://api.ai-service.com/v1/models \
+  -H "Authorization: Bearer sk-your-api-key-here"
+
+# Get a specific model
+curl https://api.ai-service.com/v1/models/gpt-4o \
+  -H "Authorization: Bearer sk-your-api-key-here"</code></pre>
+        </div>
+
+        <!-- JSON Response -->
+        <div class="json-response">
+          <div class="json-response-header">
+            <span class="json-response-label">Response — List Models (200 OK)</span>
+            <button class="copy-btn" data-copy-target="models-resp">📋 Copy</button>
+          </div>
+          <pre class="code-block" id="models-resp"><code>{
+  "object": "list",
+  "data": [
+    {
+      "id": "gpt-4o",
+      "object": "model",
+      "created": 1715367049,
+      "owned_by": "ai-service",
+      "capabilities": {
+        "chat": true,
+        "vision": true,
+        "function_calling": true,
+        "max_tokens": 128000
+      }
+    },
+    {
+      "id": "gpt-4o-mini",
+      "object": "model",
+      "created": 1715367049,
+      "owned_by": "ai-service",
+      "capabilities": {
+        "chat": true,
+        "vision": false,
+        "function_calling": true,
+        "max_tokens": 128000
+      }
+    },
+    {
+      "id": "claude-3-opus",
+      "object": "model",
+      "created": 1712198400,
+      "owned_by": "ai-service",
+      "capabilities": {
+        "chat": true,
+        "vision": true,
+        "function_calling": true,
+        "max_tokens": 200000
+      }
+    }
+  ]
+}</code></pre>
+        </div>
+
+        <!-- Specific model response -->
+        <div class="json-response" style="margin-top:16px;">
+          <div class="json-response-header">
+            <span class="json-response-label">Response — Get Model (200 OK)</span>
+            <button class="copy-btn" data-copy-target="model-detail-resp">📋 Copy</button>
+          </div>
+          <pre class="code-block" id="model-detail-resp"><code>{
+  "id": "gpt-4o",
+  "object": "model",
+  "created": 1715367049,
+  "owned_by": "ai-service",
+  "capabilities": {
+    "chat": true,
+    "vision": true,
+    "function_calling": true,
+    "max_tokens": 128000,
+    "training_data": "up_to_2024-04"
+  },
+  "pricing": {
+    "input_per_1k_tokens": 0.005,
+    "output_per_1k_tokens": 0.015
+  }
+}</code></pre>
+        </div>
+      </div>
+
+      <!-- Section: Error Handling -->
+      <div class="code-section" data-code-section="error-handling" style="display:none;">
+        <div class="code-tabs">
+          <button class="code-tab active" data-lang="python">Python</button>
+          <button class="code-tab" data-lang="javascript">JavaScript</button>
+          <button class="code-tab" data-lang="curl">cURL</button>
+        </div>
+
+        <div class="code-block-wrapper" data-code="python">
+          <div class="code-block-header">
+            <span class="code-block-lang">Python — Error Handling</span>
+            <button class="copy-btn" data-copy-target="error-py">📋 Copy</button>
+          </div>
+          <pre class="code-block" id="error-py"><code>import requests
+import time
+
+def api_call_with_retry(url, headers, 
+                         max_retries=5):
+    for attempt in range(max_retries):
+        response = requests.post(url, 
+                                 headers=headers)
+        
+        if response.status_code == 200:
+            return response.json()
+        
+        if response.status_code == 429:
+            retry_after = int(
+                response.headers.get(
+                    "Retry-After", "1"
+                )
+            )
+            time.sleep(retry_after)
+            continue
+        
+        if response.status_code >= 500:
+            wait = 2 ** attempt
+            time.sleep(wait)
+            continue
+        
+        # Client error — don't retry
+        raise Exception(
+            f"Error {response.status_code}: "
+            f"{response.json()}"
+        )
+    
+    raise Exception("Max retries exceeded")</code></pre>
+        </div>
+
+        <div class="code-block-wrapper" data-code="javascript" style="display:none;">
+          <div class="code-block-header">
+            <span class="code-block-lang">JavaScript — Error Handling</span>
+            <button class="copy-btn" data-copy-target="error-js">📋 Copy</button>
+          </div>
+          <pre class="code-block" id="error-js"><code>async function apiCallWithRetry(
+  url, headers, maxRetries = 5
+) {
+  for (let attempt = 0; attempt < maxRetries; 
+       attempt++) {
+    const res = await fetch(url, { headers });
+    
+    if (res.ok) return await res.json();
+    
+    if (res.status === 429) {
+      const retryAfter = 
+        res.headers.get("Retry-After") || 1;
+      await new Promise(r => 
+        setTimeout(r, retryAfter * 1000));
+      continue;
+    }
+    
+    if (res.status >= 500) {
+      const wait = Math.pow(2, attempt);
+      await new Promise(r => 
+        setTimeout(r, wait * 1000));
+      continue;
+    }
+    
+    throw new Error(
+      `Error ${res.status}: ` +
+      JSON.stringify(await res.json())
+    );
+  }
+  
+  throw new Error("Max retries exceeded");
+}</code></pre>
+        </div>
+
+        <div class="code-block-wrapper" data-code="curl" style="display:none;">
+          <div class="code-block-header">
+            <span class="code-block-lang">cURL — Error Handling</span>
+            <button class="copy-btn" data-copy-target="error-curl">📋 Copy</button>
+          </div>
+          <pre class="code-block" id="error-curl"><code># Use --fail to exit with error on HTTP 4xx/5xx
+# Use --retry for automatic retries on transient errors
+curl https://api.ai-service.com/v1/chat/completions \
+  -H "Authorization: Bearer sk-your-api-key-here" \
+  -H "Content-Type: application/json" \
+  -d '{"model":"gpt-4o","messages":[{"role":"user","content":"Hello"}]}' \
+  --fail \
+  --retry 3 \
+  --retry-delay 2 \
+  --retry-max-time 30 \
+  -w "\nHTTP Status: %{http_code}\n"</code></pre>
+        </div>
+
+        <!-- Error Response JSON -->
+        <div class="json-response">
+          <div class="json-response-header">
+            <span class="json-response-label">Error Response Example (401)</span>
+            <button class="copy-btn" data-copy-target="error-resp">📋 Copy</button>
+          </div>
+          <pre class="code-block" id="error-resp"><code>{
+  "error": {
+    "type": "authentication_error",
+    "message": "Invalid API key provided. Check your API key at https://dashboard.ai-service.com.",
+    "code": "invalid_api_key",
+    "param": null
+  }
+}</code></pre>
+        </div>
+      </div>
+
+      <!-- Introduction — shown by default -->
+      <div class="code-section" data-code-section="introduction">
+        <div class="code-tabs">
+          <button class="code-tab active" data-lang="python">Python</button>
+          <button class="code-tab" data-lang="javascript">JavaScript</button>
+          <button class="code-tab" data-lang="curl">cURL</button>
+        </div>
+
+        <div class="code-block-wrapper" data-code="python">
+          <div class="code-block-header">
+            <span class="code-block-lang">Python</span>
+            <button class="copy-btn" data-copy-target="intro-py">📋 Copy</button>
+          </div>
+          <pre class="code-block" id="intro-py"><code># Install the client library
+# pip install ai-service
+
+from ai_service import AIService
+
+client = AIService(
+    api_key="sk-your-api-key-here"
+)
+
+# Make your first API call
+response = client.chat.completions.create(
+    model="gpt-4o",
+    messages=[
+        {"role": "user",
+         "content": "Hello, world!"}
+    ]
+)
+
+print(response.choices[0]
+      .message.content)</code></pre>
+        </div>
+
+        <div class="code-block-wrapper" data-code="javascript" style="display:none;">
+          <div class="code-block-header">
+            <span class="code-block-lang">JavaScript</span>
+            <button class="copy-btn" data-copy-target="intro-js">📋 Copy</button>
+          </div>
+          <pre class="code-block" id="intro-js"><code>// Install: npm install ai-service
+
+import AIService from "ai-service";
+
+const client = new AIService({
+  apiKey: "sk-your-api-key-here"
+});
+
+// Make your first API call
+const response = await client
+  .chat.completions.create({
+    model: "gpt-4o",
+    messages: [
+      { role: "user", content: "Hello, world!" }
+    ]
+  });
+
+console.log(
+  response.choices[0].message.content
+);</code></pre>
+        </div>
+
+        <div class="code-block-wrapper" data-code="curl" style="display:none;">
+          <div class="code-block-header">
+            <span class="code-block-lang">cURL</span>
+            <button class="copy-btn" data-copy-target="intro-curl">📋 Copy</button>
+          </div>
+          <pre class="code-block" id="intro-curl"><code>curl https://api.ai-service.com/v1/chat/completions \
+  -H "Authorization: Bearer sk-your-api-key-here" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "gpt-4o",
+    "messages": [
+      {"role": "user", "content": "Hello, world!"}
+    ]
+  }'</code></pre>
+        </div>
+
+        <div class="json-response">
+          <div class="json-response-header">
+            <span class="json-response-label">Response (200 OK)</span>
+            <button class="copy-btn" data-copy-target="intro-resp">📋 Copy</button>
+          </div>
+          <pre class="code-block" id="intro-resp"><code>{
+  "id": "chatcmpl-9xK3nN2pQmR7vW5sY8tZ",
+  "object": "chat.completion",
+  "created": 1716000000,
+  "model": "gpt-4o-2024-05-13",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "Hello! How can I help you today?"
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 10,
+    "completion_tokens": 9,
+    "total_tokens": 19
+  }
+}</code></pre>
+        </div>
+      </div>
+
+    </div>
+  </aside>
+
+</div>
+
+<!-- ============================================================
+     JavaScript
+     ============================================================ -->
+<script>
+(function() {
+  'use strict';
+
+  // ==========================================================
+  // Theme Toggle
+  // ==========================================================
+  const html = document.documentElement;
+  const themeToggle = document.getElementById('themeToggle');
+  
+  function updateThemeIcon() {
+    const isDark = html.getAttribute('data-theme') === 'dark';
+    themeToggle.textContent = isDark ? '☀' : '🌙';
+  }
+
+  themeToggle.addEventListener('click', function() {
+    const current = html.getAttribute('data-theme');
+    const next = current === 'dark' ? 'light' : 'dark';
+    html.setAttribute('data-theme', next);
+    localStorage.setItem('api-docs-theme', next);
+    updateThemeIcon();
+  });
+
+  // Load saved theme
+  const savedTheme = localStorage.getItem('api-docs-theme');
+  if (savedTheme) {
+    html.setAttribute('data-theme', savedTheme);
+  }
+  updateThemeIcon();
+
+  // ==========================================================
+  // Mobile Menu
+  // ==========================================================
+  const sidebar = document.getElementById('sidebar');
+  const overlay = document.getElementById('sidebarOverlay');
+  const menuBtn = document.getElementById('mobileMenuBtn');
+
+  function openSidebar() {
+    sidebar.classList.add('open');
+    overlay.classList.add('visible');
+  }
+
+  function closeSidebar() {
+    sidebar.classList.remove('open');
+    overlay.classList.remove('visible');
+  }
+
+  menuBtn.addEventListener('click', function() {
+    if (sidebar.classList.contains('open')) {
+      closeSidebar();
+    } else {
+      openSidebar();
+    }
+  });
+
+  overlay.addEventListener('click', closeSidebar);
+
+  // Close sidebar when a nav item is clicked on mobile
+  sidebar.querySelectorAll('.nav-item').forEach(function(item) {
+    item.addEventListener('click', function() {
+      if (window.innerWidth <= 860) {
+        closeSidebar();
+      }
+    });
+  });
+
+  // ==========================================================
+  // Active Section Tracking — Intersection Observer
+  // ==========================================================
+  const navItems = document.querySelectorAll('.nav-item');
+  const sections = document.querySelectorAll('.section-anchor');
+
+  const observerOptions = {
+    root: null,
+    rootMargin: '-80px 0px -60% 0px',
+    threshold: 0
+  };
+
+  const observer = new IntersectionObserver(function(entries) {
+    entries.forEach(function(entry) {
+      if (entry.isIntersecting) {
+        const id = entry.target.id;
+        navItems.forEach(function(item) {
+          item.classList.remove('active');
+          if (item.getAttribute('data-section') === id) {
+            item.classList.add('active');
+          }
+        });
+        // Update code panel
+        updateCodePanel(id);
+      }
+    });
+  }, observerOptions);
+
+  sections.forEach(function(section) {
+    observer.observe(section);
+  });
+
+  // ==========================================================
+  // Code Panel Section Switching
+  // ==========================================================
+  function updateCodePanel(sectionId) {
+    const codeSections = document.querySelectorAll('.code-section');
+    codeSections.forEach(function(cs) {
+      cs.style.display = 'none';
+    });
+    const target = document.querySelector('[data-code-section="' + sectionId + '"]');
+    if (target) {
+      target.style.display = 'block';
+    }
+  }
+
+  // ==========================================================
+  // Code Language Tabs
+  // ==========================================================
+  document.querySelectorAll('.code-tabs').forEach(function(tabGroup) {
+    const tabs = tabGroup.querySelectorAll('.code-tab');
+    const parent = tabGroup.parentElement;
+
+    tabs.forEach(function(tab) {
+      tab.addEventListener('click', function() {
+        const lang = this.getAttribute('data-lang');
+
+        // Update active tab
+        tabs.forEach(function(t) { t.classList.remove('active'); });
+        this.classList.add('active');
+
+        // Show/hide code blocks
+        const codeBlocks = parent.querySelectorAll('[data-code]');
+        codeBlocks.forEach(function(block) {
+          block.style.display = block.getAttribute('data-code') === lang ? 'block' : 'none';
+        });
+      });
+    });
+  });
+
+  // ==========================================================
+  // Copy to Clipboard
+  // ==========================================================
+  document.querySelectorAll('.copy-btn').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      const targetId = this.getAttribute('data-copy-target');
+      const pre = document.getElementById(targetId);
+      if (!pre) return;
+
+      const text = pre.textContent;
+
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(function() {
+          showCopied(btn);
+        }).catch(function() {
+          fallbackCopy(text, btn);
+        });
+      } else {
+        fallbackCopy(text, btn);
+      }
+    });
+  });
+
+  function fallbackCopy(text, btn) {
+    const textarea = document.createElement('textarea');
+    textarea.value = text;
+    textarea.style.position = 'fixed';
+    textarea.style.opacity = '0';
+    document.body.appendChild(textarea);
+    textarea.select();
+    try {
+      document.execCommand('copy');
+      showCopied(btn);
+    } catch (e) {
+      // Silent fail
+    }
+    document.body.removeChild(textarea);
+  }
+
+  function showCopied(btn) {
+    const originalText = btn.textContent;
+    btn.textContent = '✓ Copied!';
+    btn.classList.add('copied');
+    setTimeout(function() {
+      btn.textContent = originalText;
+      btn.classList.remove('copied');
+    }, 1800);
+  }
+
+  // ==========================================================
+  // Syntax Highlighting — Code Blocks
+  // ==========================================================
+  function highlightCode(codeEl) {
+    if (codeEl.hasAttribute('data-highlighted')) return;
+    codeEl.setAttribute('data-highlighted', 'true');
+
+    const wrapper = codeEl.closest('.code-block-wrapper');
+    const isPython = wrapper && wrapper.getAttribute('data-code') === 'python';
+    const isJS     = wrapper && wrapper.getAttribute('data-code') === 'javascript';
+
+    if (isPython) {
+      highlightPython(codeEl);
+    } else if (isJS) {
+      highlightJavaScript(codeEl);
+    } else {
+      highlightCurl(codeEl);
+    }
+  }
+
+  function highlightPython(el) {
+    let html = el.innerHTML;
+    
+    // Escape HTML first
+    html = escapeHTML(html);
+    
+    // Comments
+    html = html.replace(/(#.*$)/gm, '<span class="syn-cm">$1</span>');
+    
+    // Triple-quoted strings
+    html = html.replace(/("""[\s\S]*?""")/g, '<span class="syn-str">$1</span>');
+    html = html.replace(/('''[\s\S]*?''')/g, '<span class="syn-str">$1</span>');
+    
+    // Regular strings (single & double)
+    html = html.replace(/(f?"[^"]*")/g, '<span class="syn-str">$1</span>');
+    html = html.replace(/(f?'[^']*')/g, '<span class="syn-str">$1</span>');
+    
+    // Decorator
+    html = html.replace(/(@\w+)/g, '<span class="syn-fn">$1</span>');
+    
+    // Function definitions
+    html = html.replace(/\b(def\s+)(\w+)/g, '<span class="syn-kw">$1</span><span class="syn-fn">$2</span>');
+    
+    // Class definitions
+    html = html.replace(/\b(class\s+)(\w+)/g, '<span class="syn-kw">$1</span><span class="syn-type">$2</span>');
+    
+    // Python keywords
+    const pyKw = ['import','from','as','if','else','elif','for','while','try','except',
+                  'finally','with','return','yield','raise','pass','break','continue',
+                  'and','or','not','in','is','None','True','False','async','await',
+                  'lambda','global','nonlocal','assert','del'];
+    pyKw.forEach(function(kw) {
+      const re = new RegExp('\\b(' + kw + ')\\b', 'g');
+      html = html.replace(re, '<span class="syn-kw">$1</span>');
+    });
+    
+    // Builtins
+    const pyBuiltins = ['print','range','len','int','str','float','list','dict','set',
+                        'tuple','bool','type','isinstance','enumerate','zip','map',
+                        'filter','sorted','reversed','open','input','super','self',
+                        'json','time','requests','response','headers','Exception',
+                        'BaseException','KeyError','ValueError','TypeError'];
+    pyBuiltins.forEach(function(bi) {
+      const re = new RegExp('\\b(' + bi + ')\\b', 'g');
+      html = html.replace(re, '<span class="syn-builtin">$1</span>');
+    });
+    
+    // Numbers
+    html = html.replace(/\b(\d+\.?\d*)\b/g, '<span class="syn-num">$1</span>');
+    
+    el.innerHTML = html;
+  }
+
+  function highlightJavaScript(el) {
+    let html = escapeHTML(el.innerHTML);
+    
+    // Single-line comments
+    html = html.replace(/(\/\/.*$)/gm, '<span class="syn-cm">$1</span>');
+    
+    // Multi-line comments
+    html = html.replace(/(\/\*[\s\S]*?\*\/)/g, '<span class="syn-cm">$1</span>');
+    
+    // Template literals
+    html = html.replace(/(`[^`]*`)/g, '<span class="syn-str">$1</span>');
+    
+    // Regular strings
+    html = html.replace(/("(?:[^"\\]|\\.)*")/g, '<span class="syn-str">$1</span>');
+    html = html.replace(/('(?:[^'\\]|\\.)*')/g, '<span class="syn-str">$1</span>');
+    
+    // Function declarations
+    html = html.replace(/\b(function\s+)(\w+)/g, '<span class="syn-kw">$1</span><span class="syn-fn">$2</span>');
+    
+    // Arrow functions
+    html = html.replace(/\b(const|let|var)\s+(\w+)\s*=\s*(async\s*)?\(/g, 
+      '<span class="syn-kw">$1</span> <span class="syn-fn">$2</span> = $3(');
+    
+    // JS Keywords
+    const jsKw = ['const','let','var','function','return','if','else','for','while',
+                  'do','switch','case','break','continue','try','catch','finally',
+                  'throw','new','this','class','extends','import','export','default',
+                  'from','async','await','of','in','typeof','instanceof','void',
+                  'delete','yield','true','false','null','undefined'];
+    jsKw.forEach(function(kw) {
+      const re = new RegExp('\\b(' + kw + ')\\b', 'g');
+      html = html.replace(re, '<span class="syn-kw">$1</span>');
+    });
+    
+    // Builtins
+    const jsBuiltins = ['console','fetch','JSON','Math','Promise','Error','Array',
+                        'Object','String','Number','Boolean','Map','Set','Date',
+                        'setTimeout','setInterval','parseInt','parseFloat',
+                        'document','window','navigator'];
+    jsBuiltins.forEach(function(bi) {
+      const re = new RegExp('\\b(' + bi + ')\\b', 'g');
+      html = html.replace(re, '<span class="syn-builtin">$1</span>');
+    });
+    
+    // Numbers
+    html = html.replace(/\b(\d+\.?\d*)\b/g, '<span class="syn-num">$1</span>');
+
+    // Arrow after highlighting
+    html = html.replace(/(=&gt;)/g, '<span class="syn-op">=&gt;</span>');
+    
+    el.innerHTML = html;
+  }
+
+  function highlightCurl(el) {
+    let html = escapeHTML(el.innerHTML);
+    
+    // Comments
+    html = html.replace(/(#.*$)/gm, '<span class="syn-cm">$1</span>');
+    
+    // Strings in single quotes
+    html = html.replace(/('[^']*')/g, '<span class="syn-str">$1</span>');
+    
+    // Strings in double quotes
+    html = html.replace(/("[^"]*")/g, '<span class="syn-str">$1</span>');
+    
+    // URLs
+    html = html.replace(/(https?:\/\/[^\s"']+)/g, '<span class="syn-str">$1</span>');
+    
+    // Flags
+    html = html.replace(/(\s-\w+)/g, ' <span class="syn-kw">$1</span>');
+    html = html.replace(/(\s--[\w-]+)/g, ' <span class="syn-kw">$1</span>');
+    
+    // Method
+    html = html.replace(/^(curl|GET|POST|PUT|DELETE|PATCH)/gm, '<span class="syn-builtin">$1</span>');
+    
+    // Headers
+    html = html.replace(/(Authorization|Content-Type|Accept|Retry-After)/g, 
+      '<span class="syn-type">$1</span>');
+    
+    // Bearer
+    html = html.replace(/\b(Bearer)\b/g, '<span class="syn-kw">$1</span>');
+    
+    el.innerHTML = html;
+  }
+
+  function escapeHTML(str) {
+    return str
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+  }
+
+  // Apply syntax highlighting to all code blocks
+  document.querySelectorAll('.code-block > code').forEach(function(codeEl) {
+    highlightCode(codeEl);
+  });
+
+  // ==========================================================
+  // JSON Syntax Highlighting
+  // ==========================================================
+  function highlightJSON(el) {
+    if (el.hasAttribute('data-json-highlighted')) return;
+    el.setAttribute('data-json-highlighted', 'true');
+
+    let html = escapeHTML(el.innerHTML);
+    
+    // Keys
+    html = html.replace(/("(?:[^"\\]|\\.)*")\s*:/g, '<span class="json-key">$1</span>:');
+    
+    // String values
+    html = html.replace(/(?<=:\s*)("(?:[^"\\]|\\.)*")/g, '<span class="json-str">$1</span>');
+    
+    // Numbers
+    html = html.replace(/(?<=:\s*)(\d+\.?\d*)/g, '<span class="json-num">$1</span>');
+    
+    // Booleans
+    html = html.replace(/\b(true|false)\b/g, '<span class="json-bool">$1</span>');
+    
+    // Null
+    html = html.replace(/\b(null)\b/g, '<span class="json-null">$1</span>');
+    
+    el.innerHTML = html;
+  }
+
+  // Apply JSON highlighting to response blocks
+  document.querySelectorAll('.json-response .code-block > code').forEach(function(codeEl) {
+    highlightJSON(codeEl);
+  });
+
+  // ==========================================================
+  // Smooth Scroll for Nav Items
+  // ==========================================================
+  navItems.forEach(function(item) {
+    item.addEventListener('click', function(e) {
+      e.preventDefault();
+      const targetId = this.getAttribute('href').substring(1);
+      const target = document.getElementById(targetId);
+      if (target) {
+        target.scrollIntoView({ behavior: 'smooth' });
+        // Update active state immediately for better UX
+        navItems.forEach(function(ni) { ni.classList.remove('active'); });
+        this.classList.add('active');
+        updateCodePanel(targetId);
+      }
+    });
+  });
+
+  // ==========================================================
+  // Resize Handler — close sidebar on resize past breakpoint
+  // ==========================================================
+  let prevWidth = window.innerWidth;
+  window.addEventListener('resize', function() {
+    const currWidth = window.innerWidth;
+    if (currWidth > 860 && prevWidth <= 860) {
+      closeSidebar();
+    }
+    prevWidth = currWidth;
+  });
+
+})();
+</script>
+
+</body>
+</html>

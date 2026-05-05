@@ -1,17 +1,19 @@
 """
-Admin user management endpoints
+Admin user management endpoints.
 """
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import select, func, or_
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 from app.core.database import get_db
 from app.core.security import get_current_user_from_jwt, hash_password
 from app.models.user import User
-from app.models.api_key import ApiKey
-from app.models.billing import Balance, Transaction
-from app.models.routing import RequestLog, AuditLog
+from app.models.billing import Balance
+from app.repositories.user_repo import UserRepository
+from app.repositories.balance_repo import BalanceRepository
+from app.repositories.api_key_repo import ApiKeyRepository
+from app.repositories.request_log_repo import RequestLogRepository
 
 router = APIRouter(tags=["Users"])
 
@@ -37,77 +39,46 @@ async def list_users(
     db: AsyncSession = Depends(get_db),
 ):
     """List users with pagination and search."""
-    base_query = select(User)
-    count_query = select(func.count(User.id))
-
-    if search:
-        filter_cond = or_(
-            User.email.ilike(f"%{search}%"),
-            User.display_name.ilike(f"%{search}%"),
-        )
-        base_query = base_query.where(filter_cond)
-        count_query = count_query.where(filter_cond)
-
-    total = await db.scalar(count_query)
-    result = await db.execute(
-        base_query.order_by(User.created_at.desc())
-        .offset((page - 1) * page_size)
-        .limit(page_size)
-    )
-    users = result.scalars().all()
+    repo = UserRepository(db)
+    offset = (page - 1) * page_size
+    rows, total = await repo.list_with_balance(search, offset, page_size)
 
     users_data = []
-    for u in users:
-        # Get balance
-        bal = await db.scalar(select(Balance.cred_balance).where(Balance.user_id == u.id))
+    for u, cred in rows:
         users_data.append({
-            "id": u.id,
-            "email": u.email,
-            "display_name": u.display_name,
-            "plan_id": u.plan_id,
-            "status": u.status,
-            "email_verified": u.email_verified,
-            "cred_balance": round(float(bal or 0), 4),
+            "id": u.id, "email": u.email,
+            "display_name": u.display_name, "plan_id": u.plan_id,
+            "status": u.status, "email_verified": u.email_verified,
+            "cred_balance": round(float(cred), 4),
             "created_at": u.created_at.isoformat() if u.created_at else None,
             "last_login_at": u.last_login_at.isoformat() if u.last_login_at else None,
         })
 
-    return {
-        "total": total,
-        "page": page,
-        "page_size": page_size,
-        "data": users_data,
-    }
+    return {"total": total, "page": page, "page_size": page_size, "data": users_data}
 
 
 @router.get("/users/{user_id}")
 async def get_user(user_id: str, db: AsyncSession = Depends(get_db)):
     """Get user details."""
-    result = await db.execute(select(User).where(User.id == user_id))
-    user = result.scalar_one_or_none()
+    user_repo = UserRepository(db)
+    user = await user_repo.get_by_id(user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
-    bal = await db.scalar(select(Balance.cred_balance).where(Balance.user_id == user.id))
+    bal_repo = BalanceRepository(db)
+    bal = await bal_repo.get_by_user_id(user.id)
 
-    # API keys count
-    key_count = await db.scalar(
-        select(func.count(ApiKey.id)).where(ApiKey.user_id == user.id)
-    )
+    key_repo = ApiKeyRepository(db)
+    key_count = await key_repo.count_by_user(user.id)
 
-    # Total requests
-    total_requests = await db.scalar(
-        select(func.count(RequestLog.id)).where(RequestLog.user_id == user.id)
-    )
+    log_repo = RequestLogRepository(db)
+    total_requests = await log_repo.count_by_user(user.id)
 
     return {
-        "id": user.id,
-        "email": user.email,
-        "display_name": user.display_name,
-        "plan_id": user.plan_id,
-        "status": user.status,
-        "email_verified": user.email_verified,
-        "cred_balance": round(float(bal or 0), 4),
+        "id": user.id, "email": user.email,
+        "display_name": user.display_name, "plan_id": user.plan_id,
+        "status": user.status, "email_verified": user.email_verified,
+        "cred_balance": round(float(bal.cred_balance if bal else 0), 4),
         "api_key_count": key_count or 0,
         "total_requests": total_requests or 0,
         "created_at": user.created_at.isoformat() if user.created_at else None,
@@ -118,7 +89,8 @@ async def get_user(user_id: str, db: AsyncSession = Depends(get_db)):
 @router.post("/users")
 async def create_user(req: UserCreate, db: AsyncSession = Depends(get_db)):
     """Create a new user."""
-    existing = await db.scalar(select(User.id).where(User.email == req.email))
+    repo = UserRepository(db)
+    existing = await repo.get_by_email(req.email)
     if existing:
         raise HTTPException(status_code=400, detail="Email already exists")
 
@@ -128,26 +100,22 @@ async def create_user(req: UserCreate, db: AsyncSession = Depends(get_db)):
         display_name=req.display_name,
         plan_id=req.plan_id,
     )
-    db.add(user)
-    await db.flush()
+    await repo.create(user)
 
-    # Create balance
-    balance = Balance(user_id=user.id)
-    db.add(balance)
+    bal_repo = BalanceRepository(db)
+    await bal_repo.create(Balance(user_id=user.id))
 
     return {
-        "id": user.id,
-        "email": user.email,
-        "display_name": user.display_name,
-        "plan_id": user.plan_id,
+        "id": user.id, "email": user.email,
+        "display_name": user.display_name, "plan_id": user.plan_id,
     }
 
 
 @router.put("/users/{user_id}")
 async def update_user(user_id: str, req: UserUpdate, db: AsyncSession = Depends(get_db)):
     """Update user."""
-    result = await db.execute(select(User).where(User.id == user_id))
-    user = result.scalar_one_or_none()
+    repo = UserRepository(db)
+    user = await repo.get_by_id(user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
@@ -164,16 +132,12 @@ async def update_user(user_id: str, req: UserUpdate, db: AsyncSession = Depends(
 @router.get("/users/{user_id}/api-keys")
 async def get_user_api_keys(user_id: str, db: AsyncSession = Depends(get_db)):
     """Get user's API keys."""
-    result = await db.execute(
-        select(ApiKey).where(ApiKey.user_id == user_id).order_by(ApiKey.created_at.desc())
-    )
-    keys = result.scalars().all()
+    repo = ApiKeyRepository(db)
+    keys = await repo.list_by_user(user_id)
 
     return {
         "data": [{
-            "id": k.id,
-            "name": k.name,
-            "prefix": k.key_prefix,
+            "id": k.id, "name": k.name, "prefix": k.key_prefix,
             "status": k.status,
             "rate_limit_rpm": k.rate_limit_rpm,
             "rate_limit_tpm": k.rate_limit_tpm,
@@ -191,31 +155,20 @@ async def get_user_transactions(
     db: AsyncSession = Depends(get_db),
 ):
     """Get user's transaction history."""
-    total = await db.scalar(
-        select(func.count(Transaction.id)).where(Transaction.user_id == user_id)
+    from app.repositories.transaction_repo import TransactionRepository
+    repo = TransactionRepository(db)
+    offset = (page - 1) * page_size
+    rows, total = await repo.list_with_user(
+        user_id=user_id, offset=offset, limit=page_size
     )
-    result = await db.execute(
-        select(Transaction)
-        .where(Transaction.user_id == user_id)
-        .order_by(Transaction.created_at.desc())
-        .offset((page - 1) * page_size)
-        .limit(page_size)
-    )
-    txns = result.scalars().all()
 
     return {
-        "total": total,
-        "page": page,
-        "page_size": page_size,
+        "total": total, "page": page, "page_size": page_size,
         "data": [{
-            "id": txn.id,
-            "type": txn.type,
-            "amount": txn.amount,
-            "currency": txn.currency,
-            "model_id": txn.model_id,
+            "id": txn.id, "type": txn.type, "amount": txn.amount,
+            "currency": txn.currency, "model_id": txn.model_id,
             "total_tokens": txn.total_tokens,
-            "route_reason": txn.route_reason,
-            "status": txn.status,
+            "route_reason": txn.route_reason, "status": txn.status,
             "created_at": txn.created_at.isoformat() if txn.created_at else None,
-        } for txn in txns]
+        } for txn, email, name in rows]
     }

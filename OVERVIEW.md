@@ -13,10 +13,25 @@
 
 ```
 maas-router/
+├── README.md                   # 👋 项目入口文档
+├── CONTRIBUTING.md             # 贡献指南
+├── CHANGELOG.md                # 变更日志
+├── GIT_WORKFLOW.md             # Git 工作流规范
+│
+├── docs/                       # 📚 技术文档中心
+│   ├── INDEX.md                # 文档导航索引
+│   ├── ARCHITECTURE.md         # 系统架构设计
+│   ├── API_REFERENCE.md        # 完整 API 参考
+│   ├── DATABASE.md             # 数据库设计文档
+│   ├── DEVELOPMENT.md          # 开发环境搭建指南
+│   ├── DEPLOYMENT.md           # 生产部署指南
+│   ├── CONFIGURATION.md        # 配置项参考
+│   └── TROUBLESHOOTING.md      # 故障排查指南
+│
 ├── backend/                    # Python FastAPI 后端微服务
 │   ├── app/
 │   │   ├── core/               # 核心模块（配置、数据库、安全、Redis）
-│   │   ├── models/             # 10 个 SQLAlchemy 数据模型
+│   │   ├── models/             # 11 个 SQLAlchemy 数据模型
 │   │   ├── api_server/         # API Server（用户端 OpenAI 兼容 API）
 │   │   ├── admin_server/       # Admin Server（管理后台 API）
 │   │   └── scripts/            # 种子数据脚本
@@ -27,7 +42,7 @@ maas-router/
 ├── admin-platform/             # React + TypeScript + Tailwind 管理前端
 │   ├── src/
 │   │   ├── components/layout/  # AdminLayout（侧边栏导航）
-│   │   ├── pages/              # 6 个管理页面
+│   │   ├── pages/              # 7 个管理页面
 │   │   │   ├── dashboard/      # 管理概览（统计卡片 + 趋势图 + 最近请求）
 │   │   │   ├── users/          # 用户管理（列表 + 搜索 + 新建 + 启用/禁用）
 │   │   │   ├── models/         # 模型管理（供应商 + 模型 + 路由规则三 Tab）
@@ -38,6 +53,10 @@ maas-router/
 │   ├── package.json
 │   ├── vite.config.ts
 │   └── Dockerfile
+│
+├── .github/                    # GitHub 模板
+│   ├── pull_request_template.md
+│   └── ISSUE_TEMPLATE.md
 │
 ├── docker-compose.yml          # PostgreSQL + Redis + API Server + Admin Server + Admin Platform
 └── Makefile                    # 常用命令

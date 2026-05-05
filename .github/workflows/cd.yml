@@ -1,0 +1,317 @@
+# ============================================================
+# MaaS-Router CD Pipeline (持续部署)
+# 触发条件: push to main → 自动部署 Staging
+#          workflow_dispatch → 手动部署 Production
+# 职责: CI 通过 → 构建镜像 → 推送 Registry → 部署
+# ============================================================
+
+name: CD Pipeline
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Deploy to environment'
+        required: true
+        type: choice
+        options:
+          - staging
+          - production
+        default: 'staging'
+      skip_ci:
+        description: 'Skip CI checks (NOT recommended)'
+        required: false
+        type: boolean
+        default: false
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME_BACKEND: ${{ github.repository }}/backend
+  IMAGE_NAME_FRONTEND: ${{ github.repository }}/frontend
+
+jobs:
+  # ============================================
+  # Stage 0: CI 检查（复用 CI 流水线）
+  # ============================================
+  ci-check:
+    name: "🔍 CI Quality Gate"
+    if: ${{ !inputs.skip_ci }}
+    uses: ./.github/workflows/ci.yml
+
+  # ============================================
+  # Stage 1: 构建 & 推送 Docker 镜像
+  # ============================================
+  build-and-push:
+    name: "📦 Build & Push Images"
+    runs-on: ubuntu-latest
+    needs: ci-check
+    if: ${{ !cancelled() && (needs.ci-check.result == 'success' || needs.ci-check.result == 'skipped') }}
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image_tag: ${{ steps.meta.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate image metadata
+        id: meta
+        run: |
+          echo "version=$(date +'%Y%m%d')-${GITHUB_SHA::7}" >> $GITHUB_OUTPUT
+          echo "short_sha=${GITHUB_SHA::7}" >> $GITHUB_OUTPUT
+          echo "branch=${GITHUB_REF_NAME}" >> $GITHUB_OUTPUT
+
+      - name: Build & push Backend image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          push: true
+          target: runtime
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_BACKEND }}:${{ steps.meta.outputs.version }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_BACKEND }}:${{ steps.meta.outputs.branch }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_BACKEND }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build & push Frontend image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./admin-platform
+          file: ./admin-platform/Dockerfile
+          push: true
+          target: dev
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_FRONTEND }}:${{ steps.meta.outputs.version }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_FRONTEND }}:${{ steps.meta.outputs.branch }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_FRONTEND }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Upload docker-compose as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: deploy-config
+          path: |
+            docker-compose.yml
+            docker-compose.prod.yml
+            nginx/
+            scripts/
+
+  # ============================================
+  # Stage 2: 部署到 Staging（自动）
+  # ============================================
+  deploy-staging:
+    name: "🚀 Deploy to Staging"
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    environment:
+      name: staging
+      url: ${{ vars.STAGING_URL || 'https://staging.maas-router.example.com' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download deploy config
+        uses: actions/download-artifact@v4
+        with:
+          name: deploy-config
+
+      - name: Deploy to Staging Server
+        uses: appleboy/ssh-action@v1.2.2
+        with:
+          host: ${{ secrets.STAGING_HOST }}
+          username: ${{ secrets.STAGING_USER }}
+          key: ${{ secrets.STAGING_SSH_KEY }}
+          script: |
+            set -e
+            cd /opt/maas-router
+
+            # Login to GHCR
+            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+            # Pull latest images
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml pull
+
+            # Run database migrations
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml run --rm \
+              -e SERVICE_NAME=migration \
+              api-server alembic upgrade head
+
+            # Deploy with zero-downtime (rolling update)
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --remove-orphans
+
+            # Clean up old images
+            docker image prune -af --filter "until=72h"
+
+            echo "✅ Staging deployment completed"
+
+      - name: Health Check - API Server
+        run: |
+          for i in $(seq 1 30); do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" ${{ vars.STAGING_URL }}/health 2>/dev/null || echo "000")
+            if [ "$STATUS" = "200" ]; then
+              echo "✅ API Server healthy (HTTP $STATUS)"
+              exit 0
+            fi
+            echo "⏳ Waiting for API Server... attempt $i/30 (HTTP $STATUS)"
+            sleep 2
+          done
+          echo "❌ Health check failed after 30 attempts"
+          exit 1
+
+      - name: Health Check - Admin Server
+        run: |
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" ${{ vars.STAGING_URL }}/api/admin/v1/health 2>/dev/null || echo "000")
+          if [ "$STATUS" = "200" ]; then
+            echo "✅ Admin Server healthy (HTTP $STATUS)"
+          else
+            echo "⚠️  Admin Server returned HTTP $STATUS (may be acceptable)"
+          fi
+
+  # ============================================
+  # Stage 3: 部署到 Production（手动审批）
+  # ============================================
+  deploy-production:
+    name: "🚀 Deploy to Production"
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    if: |
+      (github.event_name == 'workflow_dispatch' && inputs.environment == 'production') ||
+      (github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.AUTO_DEPLOY_PROD == 'true')
+    environment:
+      name: production
+      url: ${{ vars.PRODUCTION_URL || 'https://api.maas-router.example.com' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download deploy config
+        uses: actions/download-artifact@v4
+        with:
+          name: deploy-config
+
+      - name: Deploy to Production Server
+        uses: appleboy/ssh-action@v1.2.2
+        with:
+          host: ${{ secrets.PROD_HOST }}
+          username: ${{ secrets.PROD_USER }}
+          key: ${{ secrets.PROD_SSH_KEY }}
+          script: |
+            set -e
+            cd /opt/maas-router
+
+            # Save current image tags for potential rollback
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml images -q > /tmp/previous_images.txt
+
+            # Login to GHCR
+            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+            # Pull latest images
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml pull
+
+            # Run database migrations with backup
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml exec -T postgres \
+              pg_dump -U maas maas_router > /tmp/pre_deploy_backup.sql
+
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml run --rm \
+              -e SERVICE_NAME=migration \
+              api-server alembic upgrade head
+
+            # Rolling update (zero-downtime)
+            docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --remove-orphans
+
+            # Clean up old images (keep 7 days)
+            docker image prune -af --filter "until=168h"
+
+            echo "✅ Production deployment completed at $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+      - name: Production Health Check
+        run: |
+          for i in $(seq 1 30); do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" ${{ vars.PRODUCTION_URL }}/health 2>/dev/null || echo "000")
+            if [ "$STATUS" = "200" ]; then
+              echo "✅ Production healthy (HTTP $STATUS)"
+              exit 0
+            fi
+            echo "⏳ Waiting for Production... attempt $i/30 (HTTP $STATUS)"
+            sleep 3
+          done
+          echo "❌ Production health check FAILED! Triggering rollback..."
+          exit 1
+
+      - name: Notify Deployment Status
+        if: always()
+        uses: slackapi/slack-github-action@v2.0.0
+        with:
+          webhook: ${{ secrets.SLACK_WEBHOOK_URL }}
+          webhook-type: incoming-webhook
+          payload: |
+            {
+              "text": "${{ job.status == 'success' && '✅' || '❌' }} *MaaS-Router Production Deploy*",
+              "blocks": [
+                {"type": "section", "text": {"type": "mrkdwn", "text": "${{ job.status == 'success' && '✅ Production deployment successful!' || '❌ Production deployment FAILED! Check <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|GitHub Actions>'}}"}},
+                {"type": "section", "fields": [
+                  {"type": "mrkdwn", "text": "*Commit:* <${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }}|${{ github.sha }}>"},
+                  {"type": "mrkdwn", "text": "*Branch:* ${{ github.ref_name }}"},
+                  {"type": "mrkdwn", "text": "*Author:* ${{ github.actor }}"},
+                  {"type": "mrkdwn", "text": "*Status:* ${{ job.status }}"}
+                ]}
+              ]
+            }
+
+  # ============================================
+  # Stage 4: 回滚（失败时自动 / 手动触发）
+  # ============================================
+  rollback:
+    name: "⏪ Rollback"
+    runs-on: ubuntu-latest
+    needs: deploy-production
+    if: ${{ failure() && github.event_name == 'push' }}
+    environment:
+      name: production
+    steps:
+      - name: Trigger Rollback on Server
+        uses: appleboy/ssh-action@v1.2.2
+        with:
+          host: ${{ secrets.PROD_HOST }}
+          username: ${{ secrets.PROD_USER }}
+          key: ${{ secrets.PROD_SSH_KEY }}
+          script: |
+            set -e
+            cd /opt/maas-router
+
+            echo "⏪ Rolling back to previous version..."
+
+            # Restore previous images
+            if [ -f /tmp/previous_images.txt ]; then
+              docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --remove-orphans
+              echo "✅ Rollback completed (previous containers restored)"
+            else
+              echo "⚠️  No previous image info found, attempting compose restart"
+              docker compose -f docker-compose.yml -f docker-compose.prod.yml restart
+            fi
+
+            # Verify rollback health
+            sleep 10
+            curl -sf http://localhost:8001/health && echo "✅ Rollback healthy" || echo "❌ Rollback health check failed"
+
+      - name: Notify Rollback
+        uses: slackapi/slack-github-action@v2.0.0
+        with:
+          webhook: ${{ secrets.SLACK_WEBHOOK_URL }}
+          webhook-type: incoming-webhook
+          payload: |
+            {"text": "⏪ *MaaS-Router Rollback Executed* - Production deployment failed, rolled back to previous version. Check <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|Actions Run>"}

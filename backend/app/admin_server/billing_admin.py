@@ -1,15 +1,22 @@
 """
 Admin billing & finance endpoints
 """
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Header
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from pydantic import BaseModel
 from datetime import datetime, timezone
+from typing import Optional
 
 from app.core.database import get_db
 from app.models.billing import Balance, Transaction
 from app.models.user import User
+from app.middleware.idempotency import (
+    acquire_idempotency_lock,
+    release_idempotency_lock,
+    check_idempotency,
+    mark_idempotency,
+)
 
 router = APIRouter(tags=["Billing"])
 
@@ -119,34 +126,64 @@ class BalanceAdjust(BaseModel):
     user_id: str
     amount: float
     reason: str = "管理员调整"
+    idempotency_key: Optional[str] = None
 
 
 @router.post("/billing/adjust")
-async def adjust_balance(req: BalanceAdjust, db: AsyncSession = Depends(get_db)):
-    """Adjust user balance (admin action)."""
-    result = await db.execute(select(Balance).where(Balance.user_id == req.user_id))
-    balance = result.scalar_one_or_none()
+async def adjust_balance(
+    req: BalanceAdjust,
+    db: AsyncSession = Depends(get_db),
+    x_idempotency_key: Optional[str] = Header(None, alias="X-Idempotency-Key"),
+):
+    """Adjust user balance (admin action) with idempotency protection."""
+    idem_key = req.idempotency_key or x_idempotency_key
 
-    if not balance:
-        balance = Balance(user_id=req.user_id)
-        db.add(balance)
+    if idem_key:
+        # Check for duplicate request
+        cached = await check_idempotency(idem_key)
+        if cached:
+            return cached
 
-    balance.cred_balance = round(balance.cred_balance + req.amount, 6)
+        # Acquire lock to prevent race conditions
+        if not await acquire_idempotency_lock(idem_key):
+            raise HTTPException(
+                status_code=409,
+                detail="A balance adjustment with this idempotency key is already in progress",
+            )
 
-    # Record transaction
-    txn = Transaction(
-        user_id=req.user_id,
-        type="topup" if req.amount > 0 else "refund",
-        amount=req.amount,
-        currency="CRED",
-    )
-    db.add(txn)
+    try:
+        result = await db.execute(select(Balance).where(Balance.user_id == req.user_id))
+        balance = result.scalar_one_or_none()
 
-    return {
-        "user_id": req.user_id,
-        "new_balance": balance.cred_balance,
-        "adjustment": req.amount,
-    }
+        if not balance:
+            balance = Balance(user_id=req.user_id)
+            db.add(balance)
+
+        balance.cred_balance = round(balance.cred_balance + req.amount, 6)
+
+        # Record transaction
+        txn = Transaction(
+            user_id=req.user_id,
+            type="topup" if req.amount > 0 else "refund",
+            amount=req.amount,
+            currency="CRED",
+        )
+        db.add(txn)
+
+        response_data = {
+            "user_id": req.user_id,
+            "new_balance": balance.cred_balance,
+            "adjustment": req.amount,
+        }
+
+        # Cache response for idempotency
+        if idem_key:
+            await mark_idempotency(idem_key, response_data)
+
+        return response_data
+    finally:
+        if idem_key:
+            await release_idempotency_lock(idem_key)
 
 
 @router.get("/cred/supply")
