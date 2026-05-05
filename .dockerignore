@@ -1,0 +1,48 @@
+# ============================================
+# 根级 .dockerignore — 排除不进入任何镜像上下文的文件
+# ============================================
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+Dockerfile
+.dockerignore
+docker-compose*.yml
+
+# Python (backend 子目录也有自己的 .dockerignore)
+**/__pycache__/
+**/*.py[cod]
+**/*.egg-info/
+**/.venv/
+**/venv/
+**/env/
+**/*.sqlite3
+
+# Node (admin-platform 子目录也有自己的 .dockerignore)
+**/node_modules/
+**/dist/
+**/build/
+**/*.tsbuildinfo
+
+# Logs & Temp
+*.log
+*.tmp
+tmp/
+
+# Env
+.env
+.env.*
