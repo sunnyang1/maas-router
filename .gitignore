@@ -1,0 +1,76 @@
+# ============================================================
+# MaaS-Router .gitignore
+# ============================================================
+
+# --- Node / Frontend ---
+node_modules/
+dist/
+build/
+.next/
+.vite/
+*.tsbuildinfo
+
+# --- Python / Backend ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+.eggs/
+dist/
+build/
+*.egg
+.venv/
+venv/
+env/
+.env.local
+.env.*.local
+
+# --- IDE & Editors ---
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# --- Database ---
+*.db
+*.sqlite3
+*.sqlite
+
+# --- Logs ---
+*.log
+logs/
+
+# --- Environment ---
+.env
+.env.local
+.env.production
+.env.development
+
+# --- Docker ---
+docker-compose.override.yml
+
+# --- Testing ---
+.coverage
+htmlcov/
+.pytest_cache/
+.tox/
+coverage/
+cypress/videos/
+cypress/screenshots/
+
+# --- OS ---
+.DS_Store
+Thumbs.db
+ehthumbs.db
+
+# --- Workbuddy (if using local memory/artifacts) ---
+.workbuddy/memory/*.md
+
+# --- Misc ---
+*.tmp
+*.temp
+.cache/

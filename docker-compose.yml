@@ -1,0 +1,111 @@
+version: "3.9"
+
+services:
+  # ============================================
+  # PostgreSQL 16 - 主数据库
+  # ============================================
+  postgres:
+    image: postgres:16-alpine
+    container_name: maas-postgres
+    environment:
+      POSTGRES_DB: maas_router
+      POSTGRES_USER: maas
+      POSTGRES_PASSWORD: maas_dev_2026
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./data/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U maas -d maas_router"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ============================================
+  # Redis 7 - 缓存 / 实时计数 / 限流
+  # ============================================
+  redis:
+    image: redis:7-alpine
+    container_name: maas-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # ============================================
+  # API Server (FastAPI) - 用户端 API
+  # ============================================
+  api-server:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: maas-api-server
+    ports:
+      - "8001:8001"
+    environment:
+      DATABASE_URL: postgresql+asyncpg://maas:maas_dev_2026@postgres:5432/maas_router
+      REDIS_URL: redis://redis:6379/0
+      SERVICE_NAME: api-server
+      SERVICE_PORT: "8001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8001 --reload
+
+  # ============================================
+  # Admin Server (FastAPI) - 管理后台 API
+  # ============================================
+  admin-server:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: maas-admin-server
+    ports:
+      - "8005:8005"
+    environment:
+      DATABASE_URL: postgresql+asyncpg://maas:maas_dev_2026@postgres:5432/maas_router
+      REDIS_URL: redis://redis:6379/0
+      SERVICE_NAME: admin-server
+      SERVICE_PORT: "8005"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+    command: uvicorn app.admin_main:app --host 0.0.0.0 --port 8005 --reload
+
+  # ============================================
+  # Admin Platform (React) - 管理平台前端
+  # ============================================
+  admin-platform:
+    build:
+      context: ./admin-platform
+      dockerfile: Dockerfile
+    container_name: maas-admin-platform
+    ports:
+      - "5173:5173"
+    environment:
+      VITE_API_BASE_URL: http://localhost:8005/api/admin/v1
+    depends_on:
+      - admin-server
+    volumes:
+      - ./admin-platform:/app
+      - /app/node_modules
+    command: npm run dev -- --host 0.0.0.0
+
+volumes:
+  postgres_data:
+  redis_data:
