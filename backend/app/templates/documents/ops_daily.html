@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>MaaS-Router Daily Operations Report</title>
+<style>
+  @page {
+    size: A4;
+    margin: 1.5cm 1.5cm 2cm 1.5cm;
+    @top-center {
+      content: "MaaS-Router — Daily Operations Report";
+      font-family: 'Inter', 'PingFang SC', sans-serif;
+      font-size: 8px;
+      color: #9ca3af;
+      letter-spacing: 0.5px;
+    }
+    @bottom-center {
+      content: "Page " counter(page);
+      font-size: 8px; color: #9ca3af;
+    }
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Inter', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+    font-size: 10pt; line-height: 1.5; color: #1f2937;
+  }
+
+  /* Header */
+  .header {
+    display: flex; justify-content: space-between; align-items: flex-end;
+    padding-bottom: 12px; border-bottom: 3px solid {{ brand.primary }}; margin-bottom: 20px;
+  }
+  .header h1 { font-size: 18pt; font-weight: 700; color: {{ brand.primary_dark }}; }
+  .header .date { font-size: 9pt; color: #6b7280; }
+
+  /* Service Health */
+  .health-grid { display: flex; gap: 12px; margin-bottom: 24px; }
+  .health-card {
+    flex: 1; padding: 12px; border-radius: 8px; text-align: center;
+    border: 1px solid #e5e7eb;
+  }
+  .health-card.healthy { background: #f0fdf4; border-color: #bbf7d0; }
+  .health-card.healthy .status { color: #059669; }
+  .health-card.degraded { background: #fefce8; border-color: #fde68a; }
+  .health-card.degraded .status { color: #d97706; }
+  .health-card.down { background: #fef2f2; border-color: #fecaca; }
+  .health-card.down .status { color: #dc2626; }
+  .health-card .service { font-size: 12pt; font-weight: 600; margin-bottom: 4px; }
+  .health-card .status { font-size: 9pt; font-weight: 600; text-transform: uppercase; }
+
+  /* Metrics */
+  .metrics-grid { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 24px; }
+  .metric { flex: 1; min-width: 120px; padding: 12px; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; text-align: center; }
+  .metric .label { font-size: 7.5pt; text-transform: uppercase; color: #9ca3af; margin-bottom: 4px; }
+  .metric .value { font-size: 18pt; font-weight: 700; color: {{ brand.primary_dark }}; }
+  .metric .sub { font-size: 7.5pt; color: #6b7280; }
+
+  h2 { font-size: 14pt; font-weight: 700; color: {{ brand.primary_dark }}; border-bottom: 2px solid #e5e7eb; padding-bottom: 4px; margin: 24px 0 12px 0; }
+
+  table { width: 100%; border-collapse: collapse; margin: 8px 0 16px 0; font-size: 9pt; }
+  th { background: #1f2937; color: white; font-weight: 600; font-size: 8pt; text-transform: uppercase; padding: 6px 10px; text-align: left; }
+  td { padding: 6px 10px; border-bottom: 1px solid #f3f4f6; }
+  tr:nth-child(even) td { background: #f9fafb; }
+
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: 7pt; font-weight: 600; }
+  .badge-ok { background: #d1fae5; color: #065f46; }
+  .badge-warn { background: #fef3c7; color: #92400e; }
+  .badge-err { background: #fee2e2; color: #991b1b; }
+
+  .alert-item { padding: 8px 12px; margin: 4px 0; border-radius: 6px; font-size: 9pt; }
+  .alert-error { background: #fef2f2; border-left: 3px solid #ef4444; }
+  .alert-warning { background: #fffbeb; border-left: 3px solid #f59e0b; }
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<div class="header">
+  <h1>📊 Daily Operations Report</h1>
+  <div class="date">{{ report_date }}</div>
+</div>
+
+<!-- Service Health -->
+<h2>Service Health</h2>
+<div class="health-grid">
+  {% for svc, status in service_health.items() %}
+  <div class="health-card {{ status }}">
+    <div class="service">{{ svc | replace('_', ' ') | title }}</div>
+    <div class="status">{{ status | upper }}</div>
+  </div>
+  {% endfor %}
+</div>
+
+<!-- Key Metrics -->
+<h2>Key Metrics (Today)</h2>
+<div class="metrics-grid">
+  <div class="metric">
+    <div class="label">Requests</div>
+    <div class="value">{{ summary.today_requests | number }}</div>
+    <div class="sub">Total API calls</div>
+  </div>
+  <div class="metric">
+    <div class="label">Tokens</div>
+    <div class="value">{{ summary.today_tokens | number }}</div>
+    <div class="sub">Prompt + Completion</div>
+  </div>
+  <div class="metric">
+    <div class="label">Error Rate</div>
+    <div class="value" style="color: {% if summary.error_rate | replace('%','') | float > 5 %}#dc2626{% else %}#059669{% endif %};">
+      {{ summary.error_rate }}
+    </div>
+    <div class="sub">{{ summary.error_count }} errors</div>
+  </div>
+  <div class="metric">
+    <div class="label">Avg Latency</div>
+    <div class="value">{{ summary.avg_latency_ms }}<span style="font-size:10pt;">ms</span></div>
+    <div class="sub">P99: {{ summary.p99_latency_ms }}ms</div>
+  </div>
+</div>
+
+<!-- Alerts / Errors -->
+{% if alerts %}
+<h2>⚠️ Alerts &amp; Errors</h2>
+{% for alert in alerts %}
+<div class="alert-item {% if alert.code and '5' in alert.code|string %}alert-error{% else %}alert-warning{% endif %}">
+  <strong>{{ alert.code or "Warning" }}</strong> — {{ alert.count }} occurrences
+  {% if alert.message %}<br><small>{{ alert.message }}</small>{% endif %}
+</div>
+{% endfor %}
+{% else %}
+<h2>✅ Alerts</h2>
+<p style="color: #059669; font-weight: 500;">No alerts or errors recorded today. All systems nominal.</p>
+{% endif %}
+
+<!-- Footer -->
+<div style="margin-top: 30px; padding-top: 10px; border-top: 1px solid #e5e7eb; font-size: 7pt; color: #9ca3af;">
+  <p>MaaS-Router Document Engine — Auto-generated {{ now.strftime('%Y-%m-%d %H:%M UTC') }}</p>
+</div>
+</body>
+</html>

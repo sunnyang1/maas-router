@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>MaaS-Router User Usage Report</title>
+<style>
+  @page {
+    size: A4;
+    margin: 2cm 1.8cm 2.5cm 1.8cm;
+    @top-center {
+      content: "MaaS-Router — User Usage Report";
+      font-family: 'Inter', 'PingFang SC', sans-serif;
+      font-size: 9px;
+      color: #9ca3af;
+      letter-spacing: 1px;
+    }
+    @bottom-center {
+      content: "Confidential | Page " counter(page) " of " counter(pages);
+      font-family: 'Inter', 'PingFang SC', sans-serif;
+      font-size: 8px;
+      color: #9ca3af;
+    }
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Inter', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+    font-size: 10.5pt; line-height: 1.6; color: #1f2937;
+  }
+  .cover {
+    page-break-after: always; text-align: center; padding-top: 180px;
+  }
+  .cover .brand-bar {
+    width: 80px; height: 4px;
+    background: linear-gradient(90deg, {{ brand.primary }}, {{ brand.secondary }});
+    margin: 0 auto 40px; border-radius: 2px;
+  }
+  .cover h1 { font-size: 32pt; font-weight: 700; color: {{ brand.primary_dark }}; margin-bottom: 8px; }
+  .cover .subtitle { font-size: 14pt; color: #6b7280; margin-bottom: 48px; }
+  .cover .meta { font-size: 9pt; color: #9ca3af; line-height: 2; }
+  .cover .meta strong { color: #4b5563; font-weight: 600; }
+
+  h2 {
+    font-size: 16pt; font-weight: 700; color: {{ brand.primary_dark }};
+    border-bottom: 2px solid {{ brand.primary }}; padding-bottom: 6px;
+    margin: 36px 0 16px 0; page-break-after: avoid;
+  }
+  h3 { font-size: 12pt; font-weight: 600; color: #374151; margin: 20px 0 10px 0; }
+
+  .kpi-grid { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 24px; }
+  .kpi-card {
+    flex: 1; min-width: 130px; background: #f9fafb;
+    border: 1px solid #e5e7eb; border-radius: 8px; padding: 14px; text-align: center;
+  }
+  .kpi-card .label { font-size: 8pt; text-transform: uppercase; color: #9ca3af; letter-spacing: 0.5px; margin-bottom: 4px; }
+  .kpi-card .value { font-size: 18pt; font-weight: 700; color: {{ brand.primary }}; }
+
+  table { width: 100%; border-collapse: collapse; margin: 12px 0 20px 0; font-size: 9pt; page-break-inside: avoid; }
+  th { background: {{ brand.primary }}; color: white; font-weight: 600; font-size: 8.5pt; text-transform: uppercase; letter-spacing: 0.5px; padding: 8px 10px; text-align: left; }
+  th:last-child, td:last-child { text-align: right; }
+  td { padding: 7px 10px; border-bottom: 1px solid #f3f4f6; }
+  tr:nth-child(even) td { background: #f9fafb; }
+
+  .badge {
+    display: inline-block; padding: 2px 8px; border-radius: 12px;
+    font-size: 7.5pt; font-weight: 600;
+  }
+  .badge-free { background: #f3f4f6; color: #4b5563; }
+  .badge-pro { background: #dbeafe; color: #1e40af; }
+  .badge-enterprise { background: #fef3c7; color: #92400e; }
+
+  .rec-list { list-style: none; padding: 0; }
+  .rec-list li {
+    padding: 6px 12px; margin: 4px 0;
+    background: #f0fdf4; border-left: 3px solid {{ brand.success }};
+    border-radius: 0 4px 4px 0; font-size: 9.5pt;
+  }
+</style>
+</head>
+<body>
+
+<!-- Cover -->
+<div class="cover">
+  <div class="brand-bar"></div>
+  <h1>User Usage Report</h1>
+  <p class="subtitle">{{ period_start }} → {{ period_end }}</p>
+  <div class="meta">
+    <p><strong>Generated:</strong> {{ now.strftime('%Y-%m-%d %H:%M UTC') }}</p>
+    <p><strong>Classification:</strong> Internal</p>
+  </div>
+</div>
+
+<!-- Overview -->
+<h2>1. Overview</h2>
+<div class="kpi-grid">
+  <div class="kpi-card">
+    <div class="label">Active Users</div>
+    <div class="value">{{ overview.active_users | number }}</div>
+  </div>
+  <div class="kpi-card">
+    <div class="label">Total Requests</div>
+    <div class="value">{{ overview.total_requests | number }}</div>
+  </div>
+  <div class="kpi-card">
+    <div class="label">Total Tokens</div>
+    <div class="value">{{ overview.total_tokens | number }}</div>
+  </div>
+  <div class="kpi-card">
+    <div class="label">Total Cost</div>
+    <div class="value" style="color: #059669;">{{ overview.total_cost | money }}</div>
+  </div>
+</div>
+
+<!-- Top Users -->
+<h2>2. Top Users by Usage</h2>
+{% if top_users %}
+<table>
+  <thead>
+    <tr><th>#</th><th>User</th><th>Email</th><th>Plan</th><th>Requests</th><th>Tokens</th><th>Cost (CRED)</th></tr>
+  </thead>
+  <tbody>
+    {% for u in top_users %}
+    <tr>
+      <td>{{ loop.index }}</td>
+      <td>{{ u.display_name }}</td>
+      <td style="font-size: 8.5pt;">{{ u.email }}</td>
+      <td>
+        {% if u.plan == 'pro' %}<span class="badge badge-pro">PRO</span>
+        {% elif u.plan == 'enterprise' %}<span class="badge badge-enterprise">ENT</span>
+        {% else %}<span class="badge badge-free">Free</span>{% endif %}
+      </td>
+      <td>{{ u.requests | number }}</td>
+      <td>{{ u.tokens | number }}</td>
+      <td>{{ u.cost | money }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p style="color: #9ca3af;">No user activity recorded in this period.</p>
+{% endif %}
+
+<!-- Model Usage -->
+<h2>3. Model Usage Distribution</h2>
+{% if model_usage %}
+<table>
+  <thead>
+    <tr><th>Model</th><th>Requests</th><th>Avg Latency (ms)</th></tr>
+  </thead>
+  <tbody>
+    {% for m in model_usage %}
+    <tr>
+      <td>{{ m.model_id or m.model }}</td>
+      <td>{{ m.count | number }}</td>
+      <td>{{ m.avg_latency }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p style="color: #9ca3af;">No model usage data available.</p>
+{% endif %}
+
+<!-- Recommendations -->
+<h2>4. Recommendations</h2>
+<ul class="rec-list">
+  {% for rec in recommendations %}
+  <li>{{ rec }}</li>
+  {% endfor %}
+</ul>
+
+<div style="margin-top: 36px; padding-top: 12px; border-top: 1px solid #e5e7eb; font-size: 7.5pt; color: #9ca3af;">
+  <p>Automatically generated by MaaS-Router Document Engine | {{ now.strftime('%Y-%m-%d %H:%M UTC') }}</p>
+</div>
+</body>
+</html>
