@@ -1,0 +1,361 @@
+global:
+  scrape_interval: 15s     # 默认抓取间隔
+  evaluation_interval: 15s # 规则评估间隔
+  external_labels:
+    cluster: 'maas-router'
+    replica: '{{.ExternalURL}}'
+
+# 告警规则文件
+rule_files:
+  - /etc/prometheus/rules/*.yml
+
+# 抓取配置
+scrape_configs:
+  # Prometheus 自身监控
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+    metrics_path: /metrics
+
+  # MaaS-Router API 服务监控
+  - job_name: 'maas-router-api'
+    static_configs:
+      - targets: ['backend:8080']
+    metrics_path: /metrics
+    scrape_interval: 10s
+    scrape_timeout: 5s
+
+  # Redis 监控（使用 redis_exporter）
+  - job_name: 'redis'
+    static_configs:
+      - targets: ['redis-exporter:9121']
+    scrape_interval: 30s
+
+  # PostgreSQL 监控（使用 postgres_exporter）
+  - job_name: 'postgresql'
+    static_configs:
+      - targets: ['postgres-exporter:9187']
+    scrape_interval: 30s
+
+  # Node Exporter 系统监控
+  - job_name: 'node'
+    static_configs:
+      - targets: ['node-exporter:9100']
+    scrape_interval: 30s
+
+  # cAdvisor 容器监控
+  - job_name: 'cadvisor'
+    static_configs:
+      - targets: ['cadvisor:8080']
+    scrape_interval: 30s
+
+# 告警管理器配置
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ['alertmanager:9093']
+
+# 存储配置
+storage:
+  tsdb:
+    retention.time: 30d    # 数据保留 30 天
+    retention.size: 50GB   # 或保留 50GB
+
+# 远程存储（可选，用于长期存储）
+# remote_write:
+#   - url: "http://remote-storage:9201/write"
+
+# remote_read:
+#   - url: "http://remote-storage:9201/read"
+
+---
+# 告警规则配置（作为 ConfigMap 挂载）
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-rules
+  namespace: monitoring
+data:
+  maas-router-rules.yml: |
+    groups:
+      # HTTP 请求相关告警
+      - name: http_requests
+        rules:
+          # 高错误率告警
+          - alert: HighErrorRate
+            expr: |
+              (
+                sum(rate(http_requests_total{status=~"5.."}[5m]))
+                /
+                sum(rate(http_requests_total[5m]))
+              ) > 0.05
+            for: 5m
+            labels:
+              severity: critical
+            annotations:
+              summary: "高错误率告警"
+              description: "错误率超过 5%，当前值: {{ $value | humanizePercentage }}"
+
+          # 慢请求告警
+          - alert: HighLatency
+            expr: |
+              histogram_quantile(0.95,
+                sum(rate(http_request_duration_seconds_bucket[5m])) by (le)
+              ) > 2
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "高延迟告警"
+              description: "P95 延迟超过 2 秒，当前值: {{ $value }}s"
+
+          # 请求量激增告警
+          - alert: RequestSpike
+            expr: |
+              (
+                sum(rate(http_requests_total[5m]))
+                /
+                sum(rate(http_requests_total[5m] offset 1h))
+              ) > 3
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "请求量激增"
+              description: "请求量比 1 小时前增加 {{ $value | humanizePercentage }}"
+
+      # 业务指标告警
+      - name: business_metrics
+        rules:
+          # Token 使用量告警
+          - alert: HighTokenUsage
+            expr: |
+              sum(increase(token_usage_total[1h])) > 10000000
+            for: 5m
+            labels:
+              severity: info
+            annotations:
+              summary: "Token 使用量高"
+              description: "过去 1 小时 Token 使用量超过 1000 万"
+
+          # 费用告警
+          - alert: HighCost
+            expr: |
+              sum(increase(cost_total[1h])) > 100
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "费用告警"
+              description: "过去 1 小时费用超过 $100"
+
+      # 账号相关告警
+      - name: account_metrics
+        rules:
+          # 账号高负载告警
+          - alert: AccountHighLoad
+            expr: |
+              account_load_factor > 0.8
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "账号负载过高"
+              description: "账号 {{ $labels.account_id }} 负载超过 80%"
+
+          # 账号高错误率告警
+          - alert: AccountHighErrorRate
+            expr: |
+              account_error_rate > 0.1
+            for: 5m
+            labels:
+              severity: critical
+            annotations:
+              summary: "账号错误率过高"
+              description: "账号 {{ $labels.account_id }} 错误率超过 10%"
+
+          # 账号 RPM 接近限制告警
+          - alert: AccountRPMLimit
+            expr: |
+              (account_rpm / 60) > 0.9
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "账号 RPM 接近限制"
+              description: "账号 {{ $labels.account_id }} RPM 接近限制"
+
+      # 缓存相关告警
+      - name: cache_metrics
+        rules:
+          # 缓存命中率低告警
+          - alert: LowCacheHitRate
+            expr: |
+              (
+                sum(rate(cache_hits_total[5m]))
+                /
+                sum(rate(cache_hits_total[5m]) + rate(cache_misses_total[5m]))
+              ) < 0.5
+            for: 10m
+            labels:
+              severity: warning
+            annotations:
+              summary: "缓存命中率低"
+              description: "缓存命中率低于 50%"
+
+          # 缓存操作延迟高告警
+          - alert: HighCacheLatency
+            expr: |
+              histogram_quantile(0.95,
+                sum(rate(cache_duration_seconds_bucket[5m])) by (le)
+              ) > 0.01
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "缓存延迟高"
+              description: "缓存操作 P95 延迟超过 10ms"
+
+      # 数据库相关告警
+      - name: database_metrics
+        rules:
+          # 数据库查询延迟高告警
+          - alert: HighDBLatency
+            expr: |
+              histogram_quantile(0.95,
+                sum(rate(db_query_duration_seconds_bucket[5m])) by (le)
+              ) > 0.5
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "数据库查询延迟高"
+              description: "数据库查询 P95 延迟超过 500ms"
+
+          # 数据库连接数高告警
+          - alert: HighDBConnections
+            expr: |
+              db_connections > 80
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "数据库连接数高"
+              description: "数据库连接数超过 80"
+
+      # 系统资源告警
+      - name: system_resources
+        rules:
+          # CPU 使用率高告警
+          - alert: HighCPUUsage
+            expr: |
+              100 - (avg by (instance) (irate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 80
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "CPU 使用率高"
+              description: "CPU 使用率超过 80%"
+
+          # 内存使用率高告警
+          - alert: HighMemoryUsage
+            expr: |
+              (node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes)
+              /
+              node_memory_MemTotal_bytes * 100 > 85
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "内存使用率高"
+              description: "内存使用率超过 85%"
+
+          # 磁盘空间不足告警
+          - alert: LowDiskSpace
+            expr: |
+              (node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"}) < 0.1
+            for: 5m
+            labels:
+              severity: critical
+            annotations:
+              summary: "磁盘空间不足"
+              description: "磁盘可用空间低于 10%"
+
+      # Redis 告警
+      - name: redis_metrics
+        rules:
+          # Redis 内存使用率高告警
+          - alert: RedisHighMemoryUsage
+            expr: |
+              (redis_memory_used_bytes / redis_memory_max_bytes) > 0.9
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "Redis 内存使用率高"
+              description: "Redis 内存使用率超过 90%"
+
+          # Redis 连接数高告警
+          - alert: RedisHighConnections
+            expr: |
+              redis_connected_clients > 100
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "Redis 连接数高"
+              description: "Redis 连接数超过 100"
+
+---
+# Alertmanager 配置
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: alertmanager-config
+  namespace: monitoring
+data:
+  alertmanager.yml: |
+    global:
+      smtp_smarthost: 'localhost:587'
+      smtp_from: 'alert@maas-router.com'
+
+    route:
+      group_by: ['alertname', 'severity']
+      group_wait: 10s
+      group_interval: 10s
+      repeat_interval: 12h
+      receiver: 'default'
+      routes:
+        - match:
+            severity: critical
+          receiver: 'critical'
+          continue: true
+        - match:
+            severity: warning
+          receiver: 'warning'
+
+    receivers:
+      - name: 'default'
+        webhook_configs:
+          - url: 'http://webhook:5000/webhook'
+            send_resolved: true
+
+      - name: 'critical'
+        email_configs:
+          - to: 'ops@maas-router.com'
+            subject: '【严重告警】{{ .GroupLabels.alertname }}'
+        webhook_configs:
+          - url: 'http://webhook:5000/webhook/critical'
+            send_resolved: true
+
+      - name: 'warning'
+        email_configs:
+          - to: 'dev@maas-router.com'
+            subject: '【警告】{{ .GroupLabels.alertname }}'
+
+    inhibit_rules:
+      - source_match:
+          severity: 'critical'
+        target_match:
+          severity: 'warning'
+        equal: ['alertname', 'instance']

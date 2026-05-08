@@ -1,0 +1,9 @@
+go 1.21
+
+use (
+	./services/api-gateway
+	./services/router-service
+	./services/inference-service
+	./services/billing-service
+	./services/user-service
+)

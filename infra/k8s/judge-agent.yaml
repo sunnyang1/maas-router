@@ -1,0 +1,115 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: judge-agent
+  namespace: maas-router
+  labels:
+    app: judge-agent
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: judge-agent
+  template:
+    metadata:
+      labels:
+        app: judge-agent
+    spec:
+      nodeSelector:
+        gpu-type: a100
+      tolerations:
+        - key: "nvidia.com/gpu"
+          operator: "Exists"
+          effect: "NoSchedule"
+      containers:
+        - name: judge-agent
+          image: maas-router/judge-agent:v1.0.0
+          ports:
+            - containerPort: 8000
+              name: http
+          env:
+            - name: JUDGE_MODEL_API_URL
+              value: "http://qwen-llm:8000/v1/chat/completions"
+            - name: JUDGE_MODEL_NAME
+              value: "Qwen/Qwen2.5-7B-Instruct"
+            - name: LOG_LEVEL
+              value: "info"
+          resources:
+            requests:
+              nvidia.com/gpu: 1
+              cpu: "4"
+              memory: "16Gi"
+            limits:
+              nvidia.com/gpu: 1
+              cpu: "8"
+              memory: "32Gi"
+          volumeMounts:
+            - name: model-cache
+              mountPath: /models
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+      volumes:
+        - name: model-cache
+          persistentVolumeClaim:
+            claimName: model-cache-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: judge-agent
+  namespace: maas-router
+spec:
+  selector:
+    app: judge-agent
+  ports:
+    - name: http
+      port: 8000
+      targetPort: 8000
+  type: ClusterIP
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: model-cache-pvc
+  namespace: maas-router
+spec:
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 100Gi
+  storageClassName: fast-ssd
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: judge-agent-hpa
+  namespace: maas-router
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: judge-agent
+  minReplicas: 2
+  maxReplicas: 5
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70

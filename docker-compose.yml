@@ -1,0 +1,163 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:16-alpine
+    container_name: maas-postgres
+    environment:
+      POSTGRES_USER: maas_user
+      POSTGRES_PASSWORD: maas_password
+      POSTGRES_DB: maas_router
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./infra/db/migrations:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U maas_user -d maas_router"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - maas-network
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: maas-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes --maxmemory 2gb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - maas-network
+
+  # Backend API Gateway (Gin + Ent + Wire)
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: maas-backend
+    ports:
+      - "8080:8080"
+    environment:
+      - MAAS_ROUTER_DATABASE_HOST=postgres
+      - MAAS_ROUTER_DATABASE_PORT=5432
+      - MAAS_ROUTER_DATABASE_USER=maas_user
+      - MAAS_ROUTER_DATABASE_PASSWORD=maas_password
+      - MAAS_ROUTER_DATABASE_DATABASE=maas_router
+      - MAAS_ROUTER_REDIS_HOST=redis
+      - MAAS_ROUTER_REDIS_PORT=6379
+      - MAAS_ROUTER_JWT_SECRET=your-super-secret-jwt-key-change-this-in-production
+      - MAAS_ROUTER_JUDGE_AGENT_URL=http://judge-agent:8000
+      - MAAS_ROUTER_LOG_LEVEL=info
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - maas-network
+    restart: unless-stopped
+
+  # Judge Agent (智能路由 Agent)
+  judge-agent:
+    build:
+      context: ./judge-agent
+      dockerfile: Dockerfile
+    container_name: maas-judge-agent
+    ports:
+      - "8001:8000"
+    environment:
+      - JUDGE_MODEL_API_URL=http://host.docker.internal:8001/v1/chat/completions
+      - JUDGE_MODEL_NAME=Qwen/Qwen2.5-7B-Instruct
+      - LOG_LEVEL=info
+    networks:
+      - maas-network
+    restart: unless-stopped
+    profiles:
+      - with-judge
+
+  # User Frontend (Next.js)
+  user-frontend:
+    build:
+      context: ./user-frontend
+      dockerfile: Dockerfile
+    container_name: maas-user-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8080
+    depends_on:
+      - backend
+    networks:
+      - maas-network
+    restart: unless-stopped
+
+  # Admin Frontend (React)
+  admin-frontend:
+    build:
+      context: ./admin-frontend
+      dockerfile: Dockerfile
+    container_name: maas-admin-frontend
+    ports:
+      - "8000:8000"
+    environment:
+      - REACT_APP_API_URL=http://localhost:8080
+    depends_on:
+      - backend
+    networks:
+      - maas-network
+    restart: unless-stopped
+
+  # Prometheus
+  prometheus:
+    image: prom/prometheus:v2.50.0
+    container_name: maas-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./infra/monitoring/prometheus.yaml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=30d'
+      - '--web.enable-lifecycle'
+    networks:
+      - maas-network
+    restart: unless-stopped
+
+  # Grafana
+  grafana:
+    image: grafana/grafana:10.3.0
+    container_name: maas-grafana
+    ports:
+      - "3001:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      - prometheus
+    networks:
+      - maas-network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  redis_data:
+  prometheus_data:
+  grafana_data:
+
+networks:
+  maas-network:
+    driver: bridge

@@ -1,0 +1,47 @@
+# 智能推理资源优化引擎 - 复杂度分析配置
+# 用于增强版 ComplexityService 的配置
+
+complexity:
+  enabled: true
+  mode: "local"                # local: 本地规则评分 | remote: 远程评分服务
+  remote_addr: "http://judge-agent:8001"
+  timeout_ms: 50              # 评分超时时间（毫秒）
+  max_retries: 1              # 最大重试次数
+  fallback_to_judge: true     # 评分失败时回退到原有 JudgeAgent
+  cache_ttl_sec: 3600         # 缓存过期时间（秒）
+
+  # 模型分层配置
+  model_tiers:
+    - tier: "economy"
+      models: ["deepseek-v4-flash", "claude-haiku-4-20250514", "gpt-4.1-mini"]
+      threshold: 0.4
+      cost_per_token: 0.0000001
+      fallback_model: "claude-haiku-4-20250514"
+
+    - tier: "standard"
+      models: ["deepseek-v4-pro", "claude-sonnet-4-20250514", "gpt-4.1"]
+      threshold: 0.7
+      cost_per_token: 0.000001
+      fallback_model: "deepseek-v4-pro"
+
+    - tier: "premium"
+      models: ["claude-opus-4-20250514", "o3", "gemini-2.5-pro"]
+      threshold: 1.0
+      cost_per_token: 0.00001
+      fallback_model: "claude-opus-4-20250514"
+
+  # 特征提取配置
+  features:
+    max_token_count: 100000     # 最大 token 计数
+    max_sentence_count: 10000   # 最大句子计数
+    max_context_size: 1000000   # 最大上下文大小
+    max_history_length: 1000    # 最大历史消息长度
+    custom_technical_terms: []  # 自定义技术术语列表
+
+  # 质量守卫配置
+  quality_guard:
+    enabled: true
+    min_quality_pass_rate: 0.9      # 最低质量通过率
+    auto_upgrade_threshold: 0.85    # 自动升级阈值
+    feedback_sample_rate: 0.05      # 反馈采样率
+    stats_window_sec: 3600          # 统计窗口时间（秒）

@@ -1,0 +1,78 @@
+# Dependencies
+node_modules/
+vendor/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Build outputs
+dist/
+build/
+.next/
+out/
+*.exe
+*.dll
+*.so
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# TLS 证书和密钥文件
+*.pem
+
+# 生产环境配置（包含敏感信息，不应提交）
+config.production.yaml
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Testing
+coverage/
+.nyc_output/
+
+# Database
+*.db
+*.sqlite
+
+# Kubernetes secrets
+*-secret.yaml
+*-secrets.yaml
+
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+
+# Model files
+models/
+*.bin
+*.safetensors
+*.pt
+*.pth
+*.ckpt
+
+# Cache
+.cache/
+temp/
+tmp/
+
+# Internal dev tools
+.trae/

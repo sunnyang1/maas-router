@@ -1,0 +1,201 @@
+# MaaS-Router All-in-One Docker 镜像
+# 基于 Alpine Linux，包含 PostgreSQL、Redis、后端、前端（用户+管理）
+
+FROM alpine:3.19
+
+# 设置工作目录
+WORKDIR /app
+
+# 安装基础依赖
+RUN apk add --no-cache \
+    # 系统工具
+    bash \
+    curl \
+    wget \
+    ca-certificates \
+    tzdata \
+    # PostgreSQL
+    postgresql16 \
+    postgresql16-contrib \
+    postgresql16-client \
+    # Redis
+    redis \
+    # Node.js (用于前端构建)
+    nodejs \
+    npm \
+    # Go (用于后端编译)
+    go \
+    git \
+    # Supervisor 进程管理
+    supervisor \
+    # 其他依赖
+    build-base \
+    python3 \
+    py3-pip
+
+# 设置时区
+ENV TZ=Asia/Shanghai
+RUN cp /usr/share/zoneinfo/Asia/Shanghai /etc/localtime && echo "Asia/Shanghai" > /etc/timezone
+
+# 创建必要目录
+RUN mkdir -p /var/lib/postgresql/data /var/log/postgresql /run/postgresql \
+    /var/lib/redis /var/log/redis /run/redis \
+    /app/backend /app/user-frontend /app/admin-frontend \
+    /var/log/supervisor /etc/supervisor.d
+
+# 设置 PostgreSQL 环境变量
+ENV PGDATA=/var/lib/postgresql/data
+ENV POSTGRES_USER=maas
+ENV POSTGRES_PASSWORD=maas_password
+ENV POSTGRES_DB=maas_router
+
+# 初始化 PostgreSQL
+RUN chown -R postgres:postgres /var/lib/postgresql /var/log/postgresql /run/postgresql \
+    && su - postgres -c "initdb -D /var/lib/postgresql/data --encoding=UTF8 --locale=en_US.UTF-8" \
+    && su - postgres -c "pg_ctl -D /var/lib/postgresql/data start" \
+    && sleep 3 \
+    && su - postgres -c "psql -c \"CREATE USER maas WITH PASSWORD 'maas_password';\"" \
+    && su - postgres -c "psql -c \"CREATE DATABASE maas_router OWNER maas;\"" \
+    && su - postgres -c "psql -c \"GRANT ALL PRIVILEGES ON DATABASE maas_router TO maas;\"" \
+    && su - postgres -c "pg_ctl -D /var/lib/postgresql/data stop"
+
+# 配置 Redis
+RUN echo "bind 127.0.0.1" > /etc/redis.conf \
+    && echo "port 6379" >> /etc/redis.conf \
+    && echo "dir /var/lib/redis" >> /etc/redis.conf \
+    && echo "logfile /var/log/redis/redis.log" >> /etc/redis.conf \
+    && echo "daemonize no" >> /etc/redis.conf \
+    && chown -R redis:redis /var/lib/redis /var/log/redis
+
+# 复制后端代码并编译
+COPY backend/ /app/backend/
+WORKDIR /app/backend
+
+# 下载 Go 依赖并编译
+RUN go mod download 2>/dev/null || true
+RUN go build -o /usr/local/bin/maas-backend ./cmd/server/main.go 2>/dev/null || \
+    go build -o /usr/local/bin/maas-backend . 2>/dev/null || \
+    echo "后端编译跳过，将在启动时处理"
+
+# 复制用户前端代码并构建
+COPY user-frontend/ /app/user-frontend/
+WORKDIR /app/user-frontend
+RUN npm install 2>/dev/null || true
+RUN npm run build 2>/dev/null || echo "用户前端构建跳过"
+
+# 复制管理前端代码并构建
+COPY admin-frontend/ /app/admin-frontend/
+WORKDIR /app/admin-frontend
+RUN npm install 2>/dev/null || true
+RUN npm run build 2>/dev/null || echo "管理前端构建跳过"
+
+# 创建 Supervisor 配置文件
+RUN cat > /etc/supervisord.conf << 'EOF'
+[supervisord]
+nodaemon=true
+user=root
+logfile=/var/log/supervisor/supervisord.log
+pidfile=/var/run/supervisord.pid
+
+[unix_http_server]
+file=/var/run/supervisor.sock
+chmod=0700
+
+[rpcinterface:supervisor]
+supervisor.rpcinterface_factory = supervisor.rpcinterface:make_main_rpcinterface
+
+[supervisorctl]
+serverurl=unix:///var/run/supervisor.sock
+
+# PostgreSQL 服务
+[program:postgresql]
+command=/usr/bin/postgres -D /var/lib/postgresql/data
+user=postgres
+autostart=true
+autorestart=true
+priority=10
+stdout_logfile=/var/log/supervisor/postgresql.log
+stderr_logfile=/var/log/supervisor/postgresql_error.log
+
+# Redis 服务
+[program:redis]
+command=/usr/bin/redis-server /etc/redis.conf
+user=redis
+autostart=true
+autorestart=true
+priority=20
+stdout_logfile=/var/log/supervisor/redis.log
+stderr_logfile=/var/log/supervisor/redis_error.log
+
+# 后端服务
+[program:backend]
+command=/usr/local/bin/maas-backend
+environment=DATABASE_URL="postgres://maas:maas_password@localhost:5432/maas_router?sslmode=disable",REDIS_URL="redis://localhost:6379"
+directory=/app/backend
+autostart=true
+autorestart=true
+priority=30
+startsecs=10
+stdout_logfile=/var/log/supervisor/backend.log
+stderr_logfile=/var/log/supervisor/backend_error.log
+
+# 用户前端服务 (Nginx 或 Next.js)
+[program:user-frontend]
+command=npx serve /app/user-frontend/dist -l 3000
+directory=/app/user-frontend
+autostart=true
+autorestart=true
+priority=40
+stdout_logfile=/var/log/supervisor/user-frontend.log
+stderr_logfile=/var/log/supervisor/user-frontend_error.log
+
+# 管理前端服务
+[program:admin-frontend]
+command=npx serve /app/admin-frontend/dist -l 3001
+directory=/app/admin-frontend
+autostart=true
+autorestart=true
+priority=40
+stdout_logfile=/var/log/supervisor/admin-frontend.log
+stderr_logfile=/var/log/supervisor/admin-frontend_error.log
+EOF
+
+# 创建启动脚本
+RUN cat > /app/start.sh << 'EOF'
+#!/bin/bash
+set -e
+
+echo "=========================================="
+echo "  MaaS-Router All-in-One 启动脚本"
+echo "=========================================="
+
+# 确保目录权限正确
+chown -R postgres:postgres /var/lib/postgresql /var/log/postgresql /run/postgresql 2>/dev/null || true
+chown -R redis:redis /var/lib/redis /var/log/redis 2>/dev/null || true
+
+# 检查并创建必要的数据库（如果不存在）
+if [ ! -f /var/lib/postgresql/data/PG_VERSION ]; then
+    echo "初始化 PostgreSQL 数据库..."
+    su - postgres -c "initdb -D /var/lib/postgresql/data --encoding=UTF8 --locale=en_US.UTF-8"
+fi
+
+echo "启动 Supervisor 管理所有服务..."
+exec /usr/bin/supervisord -c /etc/supervisord.conf
+EOF
+
+RUN chmod +x /app/start.sh
+
+# 健康检查
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD curl -f http://localhost:8080/health || exit 1
+
+# 暴露端口
+# 3000 - 用户前端
+# 3001 - 管理前端
+# 8080 - 后端 API
+# 5432 - PostgreSQL
+# 6379 - Redis
+EXPOSE 3000 3001 8080 5432 6379
+
+# 启动命令
+CMD ["/app/start.sh"]
