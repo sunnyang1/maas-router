@@ -1,0 +1,151 @@
+# ============================================================
+# MaaS-Router Release Pipeline
+# 触发条件: 推送 v*.*.* Tag
+# 职责: CI → 构建全部镜像 → 推送 GHCR → 创建 GitHub Release
+# ============================================================
+
+name: Release Pipeline
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  # ============================================
+  # Stage 0: CI 质量门
+  # ============================================
+  ci-check:
+    name: "🔍 CI Quality Gate"
+    uses: ./.github/workflows/ci.yml
+
+  # ============================================
+  # Stage 1: 构建并推送全部镜像
+  # ============================================
+  build-and-push:
+    name: "📦 Build & Push Release Images"
+    runs-on: ubuntu-latest
+    needs: ci-check
+    if: ${{ !cancelled() && needs.ci-check.result == 'success' }}
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image_tag: ${{ steps.meta.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract version from tag
+        id: meta
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/v}
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "major=$(echo ${VERSION} | cut -d. -f1)" >> $GITHUB_OUTPUT
+
+      # --- Backend ---
+      - name: Build & push Backend
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ github.repository }}/backend:${{ steps.meta.outputs.version }}
+            ${{ env.REGISTRY }}/${{ github.repository }}/backend:${{ steps.meta.outputs.major }}
+            ${{ env.REGISTRY }}/${{ github.repository }}/backend:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # --- Judge Agent ---
+      - name: Build & push Judge Agent
+        uses: docker/build-push-action@v6
+        with:
+          context: ./judge-agent
+          file: ./judge-agent/Dockerfile
+          push: true
+          target: production
+          tags: |
+            ${{ env.REGISTRY }}/${{ github.repository }}/judge-agent:${{ steps.meta.outputs.version }}
+            ${{ env.REGISTRY }}/${{ github.repository }}/judge-agent:${{ steps.meta.outputs.major }}
+            ${{ env.REGISTRY }}/${{ github.repository }}/judge-agent:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # --- User Frontend ---
+      - name: Build & push User Frontend
+        uses: docker/build-push-action@v6
+        with:
+          context: ./user-frontend
+          file: ./user-frontend/Dockerfile
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ github.repository }}/user-frontend:${{ steps.meta.outputs.version }}
+            ${{ env.REGISTRY }}/${{ github.repository }}/user-frontend:${{ steps.meta.outputs.major }}
+            ${{ env.REGISTRY }}/${{ github.repository }}/user-frontend:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # --- Admin Frontend ---
+      - name: Build & push Admin Frontend
+        uses: docker/build-push-action@v6
+        with:
+          context: ./admin-frontend
+          file: ./admin-frontend/Dockerfile
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ github.repository }}/admin-frontend:${{ steps.meta.outputs.version }}
+            ${{ env.REGISTRY }}/${{ github.repository }}/admin-frontend:${{ steps.meta.outputs.major }}
+            ${{ env.REGISTRY }}/${{ github.repository }}/admin-frontend:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ============================================
+  # Stage 2: 创建 GitHub Release
+  # ============================================
+  create-release:
+    name: "🎉 Create GitHub Release"
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Extract version & changelog
+        id: release
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/v}
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+
+          # Extract changelog for this version
+          if [ -f docs/CHANGELOG.md ]; then
+            # Get content between this version header and the next version header (or EOF)
+            sed -n "/^## \[${VERSION}\]/,/^## \[/p" docs/CHANGELOG.md | head -n -1 > /tmp/release_notes.md
+          else
+            echo "No CHANGELOG.md found" > /tmp/release_notes.md
+          fi
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: "MaaS-Router v${{ steps.release.outputs.version }}"
+          body_path: /tmp/release_notes.md
+          draft: false
+          prerelease: ${{ contains(steps.release.outputs.version, 'rc') || contains(steps.release.outputs.version, 'beta') || contains(steps.release.outputs.version, 'alpha') }}
+          generate_release_notes: true

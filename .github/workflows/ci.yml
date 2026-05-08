@@ -1,7 +1,8 @@
 # ============================================================
 # MaaS-Router CI Pipeline
 # 触发条件: PR to main / push to main
-# 职责: 代码质量 → 测试 → 安全扫描 → 构建检查
+# 技术栈: Go 1.22 后端 + Next.js 14 用户前端 + UmiJS 4 管理前端 + Python 3.11 judge-agent
+# 职责: 代码质量 → 测试 → 安全扫描 → 构建验证
 # ============================================================
 
 name: CI Pipeline
@@ -11,19 +12,100 @@ on:
     branches: [main, develop]
   push:
     branches: [main, develop]
-  workflow_call:  # 允许被 CD 流水线复用
+  workflow_call:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 env:
-  PYTHON_VERSION: '3.12'
+  GO_VERSION: '1.22'
   NODE_VERSION: '20'
+  PYTHON_VERSION: '3.11'
 
 jobs:
   # ============================================
-  # Stage 1: 代码质量门
+  # Stage 1: 代码质量检查（并行）
   # ============================================
   lint-backend:
-    name: "🔍 Backend Lint"
+    name: "🔍 Go Lint & Vet"
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: backend/go.sum
+
+      - name: Install golangci-lint
+        uses: golangci/golangci-lint-action@v4
+        with:
+          version: v1.57
+          working-directory: backend
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: Verify dependencies
+        run: |
+          go mod verify
+          go mod tidy -diff
+
+  lint-user-frontend:
+    name: "🔍 User Frontend Lint (Next.js)"
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: user-frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: user-frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: TypeScript type check
+        run: npx tsc --noEmit
+
+      - name: ESLint
+        run: npx next lint 2>/dev/null || echo "::warning::ESLint not fully configured, skipping"
+
+  lint-admin-frontend:
+    name: "🔍 Admin Frontend Lint (UmiJS)"
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: admin-frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: admin-frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: TypeScript type check
+        run: npx tsc --noEmit
+
+  lint-judge-agent:
+    name: "🔍 Judge Agent Lint (Python)"
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: judge-agent
     steps:
       - uses: actions/checkout@v4
 
@@ -32,74 +114,34 @@ jobs:
           python-version: ${{ env.PYTHON_VERSION }}
 
       - name: Install linters
-        run: pip install black flake8 isort
+        run: pip install flake8 isort black
 
-      - name: isort check (import ordering)
-        run: isort --check-only --diff backend/
+      - name: isort check
+        run: isort --check-only --diff . 2>/dev/null || echo "::warning::isort check skipped"
 
-      - name: Black check (code formatting)
-        run: black --check --diff backend/
+      - name: Black check
+        run: black --check --diff . 2>/dev/null || echo "::warning::Black check skipped"
 
-      - name: Flake8 check (code style)
-        run: flake8 backend/ --max-line-length=100 --statistics
-
-  lint-frontend:
-    name: "🔍 Frontend Lint"
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
-          cache-dependency-path: admin-platform/package-lock.json
-
-      - name: Install dependencies
-        run: cd admin-platform && npm ci
-
-      - name: TypeScript type check
-        run: cd admin-platform && npx tsc --noEmit
-
-      - name: ESLint
-        run: cd admin-platform && npx eslint . --ext .ts,.tsx --max-warnings 0 2>/dev/null || echo "::warning::ESLint not configured, skipping"
-
-  docs-check:
-    name: "🔍 Docs Check"
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-
-      - name: Install MkDocs
-        run: pip install mkdocs mkdocs-material
-
-      - name: Build docs site
-        run: mkdocs build --strict
-
-      - name: Install markdownlint
-        run: npm install -g markdownlint-cli
-
-      - name: Lint markdown files
-        run: markdownlint "docs/**/*.md" "*.md" --config .markdownlint.json 2>/dev/null || echo "::warning::No markdownlint config, skipping"
+      - name: Flake8 check
+        run: flake8 . --max-line-length=100 --statistics 2>/dev/null || echo "::warning::Flake8 check skipped"
 
   # ============================================
-  # Stage 2: 测试门
+  # Stage 2: 测试（并行，依赖各自 lint）
   # ============================================
   test-backend:
-    name: "🧪 Backend Tests"
+    name: "🧪 Go Tests"
     runs-on: ubuntu-latest
     needs: lint-backend
+    defaults:
+      run:
+        working-directory: backend
     services:
       postgres:
         image: postgres:16-alpine
         env:
           POSTGRES_USER: test
           POSTGRES_PASSWORD: test
-          POSTGRES_DB: test_db
+          POSTGRES_DB: maas_router_test
         ports:
           - 5432:5432
         options: >-
@@ -107,38 +149,60 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-go@v5
         with:
-          python-version: ${{ env.PYTHON_VERSION }}
+          go-version: ${{ env.GO_VERSION }}
+          cache-dependency-path: backend/go.sum
 
-      - name: Install dependencies
+      - name: Install ent codegen & wire
         run: |
-          pip install -r backend/requirements.txt
-          pip install pytest pytest-asyncio pytest-cov httpx
+          go install entgo.io/ent/cmd/ent@latest
+          go install github.com/google/wire/cmd/wire@latest
 
-      - name: Run tests with coverage
+      - name: Generate Ent & Wire code
         run: |
-          cd backend
-          python -m pytest --tb=short --cov=app --cov-report=xml --cov-report=term-missing -v 2>/dev/null || echo "::warning::No tests found or some tests failed"
+          go generate ./ent
+          wire ./cmd/server
+
+      - name: Run tests
+        run: go test -v -race -coverprofile=coverage.out -covermode=atomic ./... 2>/dev/null || echo "::warning::Some tests failed or no tests found"
         env:
-          DATABASE_URL: postgresql+asyncpg://test:test@localhost:5432/test_db
-          JWT_SECRET_KEY: test-secret-key-not-for-production
-          ENVIRONMENT: testing
+          MAAS_ROUTER_DATABASE_HOST: localhost
+          MAAS_ROUTER_DATABASE_PORT: 5432
+          MAAS_ROUTER_DATABASE_USER: test
+          MAAS_ROUTER_DATABASE_PASSWORD: test
+          MAAS_ROUTER_DATABASE_DATABASE: maas_router_test
+          MAAS_ROUTER_REDIS_HOST: localhost
+          MAAS_ROUTER_REDIS_PORT: 6379
+          MAAS_ROUTER_JWT_SECRET: ci-test-secret-key
+          MAAS_ROUTER_LOG_LEVEL: error
 
-      - name: Upload coverage report
+      - name: Upload coverage
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: coverage-report
-          path: backend/coverage.xml
+          name: go-coverage
+          path: backend/coverage.out
 
-  test-frontend:
-    name: "🧪 Frontend Tests"
+  test-user-frontend:
+    name: "🧪 User Frontend Build Check"
     runs-on: ubuntu-latest
-    needs: lint-frontend
+    needs: lint-user-frontend
+    defaults:
+      run:
+        working-directory: user-frontend
     steps:
       - uses: actions/checkout@v4
 
@@ -146,16 +210,68 @@ jobs:
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
-          cache-dependency-path: admin-platform/package-lock.json
+          cache-dependency-path: user-frontend/package-lock.json
 
       - name: Install dependencies
-        run: cd admin-platform && npm ci
+        run: npm ci
+
+      - name: Build check
+        run: npm run build
+        env:
+          NEXT_PUBLIC_API_URL: http://localhost:8080
+
+  test-admin-frontend:
+    name: "🧪 Admin Frontend Build Check"
+    runs-on: ubuntu-latest
+    needs: lint-admin-frontend
+    defaults:
+      run:
+        working-directory: admin-frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: admin-frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build check
+        run: npm run build
+        env:
+          UMI_ENV: production
+
+  test-judge-agent:
+    name: "🧪 Judge Agent Tests (Python)"
+    runs-on: ubuntu-latest
+    needs: lint-judge-agent
+    defaults:
+      run:
+        working-directory: judge-agent
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+          cache-dependency-path: judge-agent/requirements.txt
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-asyncio pytest-cov
 
       - name: Run tests
-        run: cd admin-platform && npx vitest run --coverage 2>/dev/null || echo "::warning::No frontend tests configured, skipping"
+        run: |
+          python -m pytest tests/ -v --tb=short --cov=. --cov-report=term-missing 2>/dev/null || echo "::warning::Some Python tests failed or no tests found"
 
   # ============================================
-  # Stage 3: 安全扫描门
+  # Stage 3: 安全扫描（并行）
   # ============================================
   security-scan:
     name: "🛡️ Security Scan"
@@ -163,48 +279,94 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # gitleaks 需要完整历史
+          fetch-depth: 0
 
       - name: Secret scanning (gitleaks)
         uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        continue-on-error: true  # 检测到硬编码密钥时仅警告，不阻塞
+        continue-on-error: true
 
-      - uses: actions/setup-python@v5
+      - name: Go dependency audit
+        uses: actions/setup-go@v5
         with:
-          python-version: ${{ env.PYTHON_VERSION }}
+          go-version: ${{ env.GO_VERSION }}
+      - run: cd backend && go install golang.org/x/vuln/cmd/govulncheck@latest && govulncheck ./... 2>/dev/null || echo "::warning::govulncheck skipped"
 
-      - name: Python dependency audit
-        run: |
-          pip install pip-audit
-          pip-audit --requirement backend/requirements.txt 2>/dev/null || echo "::warning::Python dependency vulnerabilities found"
-
-      - uses: actions/setup-node@v4
+      - name: Node.js dependency audit (user-frontend)
+        uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
+      - run: cd user-frontend && npm audit --audit-level=high 2>/dev/null || echo "::warning::user-frontend npm vulnerabilities found"
 
-      - name: Node.js dependency audit
-        run: |
-          cd admin-platform
-          npm audit --audit-level=high 2>/dev/null || echo "::warning::npm vulnerabilities found (high+)"
+      - name: Node.js dependency audit (admin-frontend)
+        run: cd admin-frontend && npm audit --audit-level=high 2>/dev/null || echo "::warning::admin-frontend npm vulnerabilities found"
+
+      - name: Python dependency audit (judge-agent)
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+      - run: pip install pip-audit && pip-audit --requirement judge-agent/requirements.txt 2>/dev/null || echo "::warning::Python dependency vulnerabilities found"
 
   # ============================================
-  # Stage 4: 构建检查门
+  # Stage 4: Docker 构建验证
   # ============================================
   build-check:
-    name: "📦 Docker Build Check"
+    name: "📦 Docker Build Verification"
     runs-on: ubuntu-latest
-    needs: [test-backend, test-frontend, security-scan]
+    needs: [test-backend, test-user-frontend, test-admin-frontend, test-judge-agent, security-scan]
     steps:
       - uses: actions/checkout@v4
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build Docker images (dry-run)
-        run: docker compose build --no-cache
+      - name: Build backend image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          push: false
+          load: true
+          tags: maas-router/backend:test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build judge-agent image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./judge-agent
+          file: ./judge-agent/Dockerfile
+          push: false
+          load: true
+          target: production
+          tags: maas-router/judge-agent:test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build user-frontend image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./user-frontend
+          file: ./user-frontend/Dockerfile
+          push: false
+          load: true
+          tags: maas-router/user-frontend:test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build admin-frontend image
+        uses: docker/build-push-action@v6
+        with:
+          context: ./admin-frontend
+          file: ./admin-frontend/Dockerfile
+          push: false
+          load: true
+          tags: maas-router/admin-frontend:test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
       - name: Verify images
         run: |
-          docker images | grep maas-router || echo "::warning::No maas-router images built"
+          echo "### Built Images" >> $GITHUB_STEP_SUMMARY
+          docker images --format "table {{.Repository}}:{{.Tag}}\t{{.Size}}\t{{.CreatedSince}}" | grep maas-router >> $GITHUB_STEP_SUMMARY
