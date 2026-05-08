@@ -4,23 +4,23 @@ Complexity Analysis Data Models
 Pydantic models for complexity analysis requests, responses, and configuration.
 """
 
-from typing import Optional, List
+from typing import Literal, Optional, List
 from pydantic import BaseModel, Field
 
 
 class Message(BaseModel):
     """Generic message structure for complexity analysis."""
-    role: str = Field(..., description="Message role: user, assistant, system")
-    content: str = Field(..., description="Message content")
+    role: Literal["user", "assistant", "system"] = Field(..., description="Message role")
+    content: str = Field(..., min_length=1, max_length=50000, description="Message content")
 
 
 class AnalyzeRequest(BaseModel):
     """Request model for complexity analysis."""
-    model: str = Field(..., description="Requested model name")
-    messages: List[Message] = Field(..., min_length=1, description="Conversation messages")
-    system: Optional[str] = Field(None, description="System prompt")
-    max_tokens: int = Field(0, ge=0, description="Maximum tokens requested")
-    stream: bool = Field(False, description="Whether streaming is requested")
+    model: str = Field(..., min_length=1, max_length=200, pattern=r'^[a-zA-Z0-9._-]+$', description="Model name")
+    messages: List[Message] = Field(..., min_length=1, max_length=100, description="Conversation messages")
+    system: Optional[str] = Field(None, max_length=10000, description="System prompt")
+    max_tokens: int = Field(0, ge=0, le=128000, description="Maximum tokens")
+    stream: bool = Field(False, description="Streaming mode")
 
     class Config:
         json_schema_extra = {

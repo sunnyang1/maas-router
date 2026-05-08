@@ -522,7 +522,7 @@ async def score_complexity(request: AnalyzeRequest):
         return profile
     except Exception as e:
         logger.error(f"Complexity scoring failed: {e}")
-        raise HTTPException(status_code=500, detail=f"Scoring failed: {str(e)}")
+        raise HTTPException(status_code=500, detail="Scoring failed")
 
 
 @router.get("/health", response_model=HealthResponse, tags=["Complexity"])

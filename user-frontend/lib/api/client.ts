@@ -109,6 +109,8 @@ class ApiClient {
         'Content-Type': 'application/json',
       },
       timeout: 30000,
+      maxContentLength: 10 * 1024 * 1024, // 10MB
+      maxBodyLength: 10 * 1024 * 1024,    // 10MB
     });
 
     // Request interceptor - 添加 JWT Token

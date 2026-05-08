@@ -5,13 +5,14 @@ import (
 	"context"
 	"crypto/hmac"
 	"crypto/md5"
+	"crypto/rand"
 	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
 	"encoding/xml"
 	"errors"
 	"fmt"
-	"math/rand"
 	"sort"
 	"strings"
 	"time"
@@ -238,7 +239,7 @@ func (p *WechatProvider) VerifyWebhook(ctx context.Context, payload *WebhookPayl
 	
 	// 验证签名
 	expectedSign := p.generateSign(params)
-	return sign == expectedSign, nil
+	return subtle.ConstantTimeCompare([]byte(sign), []byte(expectedSign)) == 1, nil
 }
 
 // ParseWebhook 解析微信支付回调数据
@@ -270,12 +271,17 @@ func (p *WechatProvider) ParseWebhook(ctx context.Context, body []byte, signatur
 	}, nil
 }
 
-// generateNonceStr 生成随机字符串
+// generateNonceStr 生成随机字符串（使用 crypto/rand）
 func (p *WechatProvider) generateNonceStr() string {
 	const letters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 	b := make([]byte, 32)
+	_, err := rand.Read(b)
+	if err != nil {
+		// fallback to timestamp-based nonce
+		return fmt.Sprintf("%d", time.Now().UnixNano())
+	}
 	for i := range b {
-		b[i] = letters[rand.Intn(len(letters))]
+		b[i] = letters[b[i]%byte(len(letters))]
 	}
 	return string(b)
 }

@@ -250,6 +250,7 @@ func (h *PaymentHandler) HandleWebhook(c *gin.Context) {
 	}
 
 	// 读取请求体
+	c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 1<<20) // 1MB for webhook
 	body, err := io.ReadAll(c.Request.Body)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, ErrorResponse{Error: "读取请求体失败"})

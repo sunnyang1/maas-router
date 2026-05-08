@@ -75,7 +75,8 @@ type OAuthUserInfo struct {
 func (h *OAuthHandler) GitHubAuth(c *gin.Context) {
 	state := generateOAuthState()
 	// 存储state到cookie，用于回调验证
-	c.SetCookie("oauth_state", state, 600, "/", "", false, true)
+	c.SetSameSite(http.SameSiteLaxMode)
+	c.SetCookie("oauth_state", state, 600, "/", "", true, true)
 
 	cfg := h.getGitHubConfig()
 	authURL := fmt.Sprintf("%s?client_id=%s&redirect_uri=%s&scope=%s&state=%s",
@@ -98,7 +99,8 @@ func (h *OAuthHandler) GitHubCallback(c *gin.Context) {
 		ErrorResponse(c, http.StatusBadRequest, "INVALID_STATE", "无效的state参数")
 		return
 	}
-	c.SetCookie("oauth_state", "", -1, "/", "", false, true)
+	c.SetSameSite(http.SameSiteLaxMode)
+	c.SetCookie("oauth_state", "", -1, "/", "", true, true)
 
 	code := c.Query("code")
 	if code == "" {
@@ -262,7 +264,8 @@ func (h *OAuthHandler) getGitHubPrimaryEmail(token string) string {
 // GET /api/v1/auth/google
 func (h *OAuthHandler) GoogleAuth(c *gin.Context) {
 	state := generateOAuthState()
-	c.SetCookie("oauth_state", state, 600, "/", "", false, true)
+	c.SetSameSite(http.SameSiteLaxMode)
+	c.SetCookie("oauth_state", state, 600, "/", "", true, true)
 
 	cfg := h.getGoogleConfig()
 	scope := url.QueryEscape("openid email profile")
@@ -285,7 +288,8 @@ func (h *OAuthHandler) GoogleCallback(c *gin.Context) {
 		ErrorResponse(c, http.StatusBadRequest, "INVALID_STATE", "无效的state参数")
 		return
 	}
-	c.SetCookie("oauth_state", "", -1, "/", "", false, true)
+	c.SetSameSite(http.SameSiteLaxMode)
+	c.SetCookie("oauth_state", "", -1, "/", "", true, true)
 
 	code := c.Query("code")
 	if code == "" {
@@ -330,7 +334,8 @@ func (h *OAuthHandler) exchangeGoogleToken(code string, cfg *OAuthConfig) (strin
 	data.Set("redirect_uri", cfg.RedirectURL)
 	data.Set("grant_type", "authorization_code")
 
-	resp, err := http.PostForm(cfg.TokenURL, data)
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.PostForm(cfg.TokenURL, data)
 	if err != nil {
 		return "", err
 	}
@@ -397,7 +402,8 @@ func (h *OAuthHandler) getGoogleUserInfo(token string) (*OAuthUserInfo, error) {
 // GET /api/v1/auth/wechat
 func (h *OAuthHandler) WeChatAuth(c *gin.Context) {
 	state := generateOAuthState()
-	c.SetCookie("oauth_state", state, 600, "/", "", false, true)
+	c.SetSameSite(http.SameSiteLaxMode)
+	c.SetCookie("oauth_state", state, 600, "/", "", true, true)
 
 	cfg := h.getWeChatConfig()
 	authURL := fmt.Sprintf("https://open.weixin.qq.com/connect/qrconnect?appid=%s&redirect_uri=%s&response_type=code&scope=snsapi_login&state=%s#wechat_redirect",
@@ -417,7 +423,8 @@ func (h *OAuthHandler) WeChatCallback(c *gin.Context) {
 		ErrorResponse(c, http.StatusBadRequest, "INVALID_STATE", "无效的state参数")
 		return
 	}
-	c.SetCookie("oauth_state", "", -1, "/", "", false, true)
+	c.SetSameSite(http.SameSiteLaxMode)
+	c.SetCookie("oauth_state", "", -1, "/", "", true, true)
 
 	code := c.Query("code")
 	if code == "" {
@@ -455,7 +462,8 @@ func (h *OAuthHandler) exchangeWeChatToken(code string, cfg *OAuthConfig) (strin
 	url := fmt.Sprintf("https://api.weixin.qq.com/sns/oauth2/access_token?appid=%s&secret=%s&code=%s&grant_type=authorization_code",
 		cfg.ClientID, cfg.ClientSecret, code)
 
-	resp, err := http.Get(url)
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Get(url)
 	if err != nil {
 		return "", "", err
 	}
@@ -480,7 +488,8 @@ func (h *OAuthHandler) getWeChatUserInfo(accessToken, openID string) (*OAuthUser
 	url := fmt.Sprintf("https://api.weixin.qq.com/sns/userinfo?access_token=%s&openid=%s",
 		accessToken, openID)
 
-	resp, err := http.Get(url)
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Get(url)
 	if err != nil {
 		return nil, err
 	}

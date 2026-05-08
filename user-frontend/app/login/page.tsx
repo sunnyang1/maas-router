@@ -70,7 +70,11 @@ export default function LoginPage() {
   };
 
   // OAuth登录处理
-  const handleOAuthLogin = (provider: 'github' | 'google' | 'wechat') => {
+  const ALLOWED_PROVIDERS = ['github', 'google', 'wechat'] as const;
+  type OAuthProvider = typeof ALLOWED_PROVIDERS[number];
+
+  const handleOAuthLogin = (provider: OAuthProvider) => {
+    if (!ALLOWED_PROVIDERS.includes(provider)) return;
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'https://api.maas-router.com';
     window.location.href = `${apiUrl}/api/v1/auth/${provider}`;
   };

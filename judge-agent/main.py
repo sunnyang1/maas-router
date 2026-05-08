@@ -12,9 +12,11 @@ from contextlib import asynccontextmanager
 from typing import Optional, List, Dict, Any
 
 import yaml
-from fastapi import FastAPI, HTTPException, status
+from fastapi import FastAPI, HTTPException, status, Depends, Security, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import APIKeyHeader
 from fastapi.responses import JSONResponse
+from starlette.middleware.base import BaseHTTPMiddleware
 from pydantic import BaseModel, Field
 
 from judge.agent import JudgeAgent, JudgeAgentFactory, JudgeConfig
@@ -32,6 +34,58 @@ logger = logging.getLogger(__name__)
 CONFIG_PATH = os.getenv("JUDGE_CONFIG_PATH", "config.yaml")
 APP_CONFIG: Dict[str, Any] = {}
 
+
+# ============== Security Middlewares ==============
+
+class RequestSizeLimitMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        content_length = request.headers.get("content-length")
+        if content_length:
+            try:
+                if int(content_length) > 10_000_000:  # 10MB
+                    return JSONResponse(
+                        status_code=413,
+                        content={"error": "Request body too large", "max_size": "10MB"}
+                    )
+            except ValueError:
+                pass
+        return await call_next(request)
+
+
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["X-XSS-Protection"] = "1; mode=block"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+        return response
+
+
+# ============== API Key Authentication ==============
+
+JUDGE_API_KEY = os.getenv("JUDGE_API_KEY", "")
+api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
+
+
+async def verify_api_key(request: Request, key: Optional[str] = Security(api_key_header)):
+    # Skip auth for health check endpoints
+    if request.url.path in ("/health", "/v1/complexity/health"):
+        return None
+    # If no API key is configured, allow all (for development)
+    if not JUDGE_API_KEY:
+        return None
+    if not key or key != JUDGE_API_KEY:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or missing API key"
+        )
+    return key
+
+
+# ============== Application Config ==============
 
 def load_app_config(config_path: str) -> Dict[str, Any]:
     """Load application configuration from YAML file."""
@@ -102,13 +156,22 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# Add CORS middleware
+# Add middlewares (order matters: last added = first executed)
+# RequestSizeLimitMiddleware runs first (outermost)
+app.add_middleware(RequestSizeLimitMiddleware)
+# SecurityHeadersMiddleware runs second
+app.add_middleware(SecurityHeadersMiddleware)
+
+# CORS configuration with restricted origins
+_allowed_origins_str = os.getenv("CORS_ORIGINS", "http://localhost:3000,http://localhost:8000")
+ALLOWED_ORIGINS = [origin.strip() for origin in _allowed_origins_str.split(",") if origin.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization", "X-API-Key"],
 )
 
 # Register complexity analysis router
@@ -204,7 +267,7 @@ class ErrorResponse(BaseModel):
 # ============== API Endpoints ==============
 
 @app.get("/", tags=["Root"])
-async def root():
+async def root(api_key: str = Depends(verify_api_key)):
     """Root endpoint with service information."""
     return {
         "service": "MaaS-Router Judge Agent",
@@ -224,7 +287,7 @@ async def root():
         500: {"model": ErrorResponse, "description": "Internal server error"}
     }
 )
-async def score_query(request: ScoreRequest):
+async def score_query(request: ScoreRequest, api_key: str = Depends(verify_api_key)):
     """
     对查询进行复杂度评分。
 
@@ -252,7 +315,7 @@ async def score_query(request: ScoreRequest):
         logger.error(f"Error scoring query: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to score query: {str(e)}"
+            detail="Failed to score query"
         )
 
 
@@ -307,7 +370,7 @@ async def health_check_post():
     response_model=ModelsResponse,
     tags=["Models"]
 )
-async def get_models():
+async def get_models(api_key: str = Depends(verify_api_key)):
     """
     获取支持的模型路由配置。
 
@@ -334,7 +397,7 @@ async def get_models():
         logger.error(f"Error getting models: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to get models: {str(e)}"
+            detail="Failed to get models"
         )
 
 
@@ -363,7 +426,7 @@ class BatchScoreResponse(BaseModel):
     response_model=BatchScoreResponse,
     tags=["Scoring"]
 )
-async def score_batch(request: BatchScoreRequest):
+async def score_batch(request: BatchScoreRequest, api_key: str = Depends(verify_api_key)):
     """
     批量复杂度评分。
 
@@ -398,7 +461,7 @@ async def score_batch(request: BatchScoreRequest):
         logger.error(f"Error in batch scoring: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to process batch: {str(e)}"
+            detail="Failed to process batch"
         )
 
 
@@ -407,10 +470,12 @@ async def score_batch(request: BatchScoreRequest):
 @app.exception_handler(Exception)
 async def generic_exception_handler(request, exc):
     """Handle generic exceptions."""
-    logger.error(f"Unhandled exception: {exc}")
+    import uuid
+    request_id = str(uuid.uuid4())
+    logger.error(f"Unhandled exception [request_id={request_id}]: {exc}")
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        content={"error": "Internal server error", "detail": str(exc)}
+        content={"error": "Internal server error", "request_id": request_id}
     )
 
 

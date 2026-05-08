@@ -252,19 +252,13 @@ func (h *AuthHandler) RefreshToken(c *gin.Context) {
 // Logout 处理 POST /api/v1/auth/logout
 // 用户登出接口（可选：将 Token 加入黑名单）
 func (h *AuthHandler) Logout(c *gin.Context) {
-	// 获取当前用户信息（可选）
-	userID, exists := c.Get(string(ctxkey.ContextKeyUserID))
-	if !exists {
-		c.JSON(http.StatusOK, gin.H{"message": "登出成功"})
-		return
-	}
+	// Clear the access token cookie
+	c.SetSameSite(http.SameSiteLaxMode)
+	c.SetCookie("access-token", "", -1, "/", "", true, true)
+	c.SetCookie("refresh-token", "", -1, "/", "", true, true)
 
-	// 可选：将 Token 加入黑名单
-	// 这需要 Token 黑名单服务支持
-	// h.AuthService.InvalidateToken(c.Request.Context(), userID.(string))
-
-	// 更新最后活跃时间
-	go h.UserService.UpdateLastActive(c.Request.Context(), userID.(string))
+	// TODO: Implement token blacklist using Redis
+	// h.AuthService.InvalidateToken(c.Request.Context(), tokenString)
 
 	c.JSON(http.StatusOK, gin.H{"message": "登出成功"})
 }

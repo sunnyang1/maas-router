@@ -4,6 +4,7 @@ package server
 import (
 	"crypto/tls"
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"golang.org/x/net/http2"
@@ -51,8 +52,18 @@ func NewHTTPServer(config HTTPServerConfig) *HTTPServer {
 	// 2. 请求唯一 ID 中间件（尽早生成，方便后续中间件和 handler 使用）
 	engine.Use(middleware.ClientRequestID())
 
-	// 3. CORS 跨域中间件
-	engine.Use(middleware.CORS(middleware.DefaultCORSConfig()))
+	// 3. 请求体大小限制中间件
+	engine.Use(middleware.BodyLimit())
+
+	// 4. CORS 跨域中间件
+	corsConfig := middleware.CORSConfig{
+		AllowedOrigins:   []string{"http://localhost:3000", "http://localhost:8000"},
+		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"},
+		AllowedHeaders:   []string{"Origin", "Content-Type", "Accept", "Authorization", "X-Requested-With"},
+		AllowCredentials: true,
+		MaxAge:           86400,
+	}
+	engine.Use(middleware.CORS(corsConfig))
 
 	// 4. 可选：限流中间件（需要 Redis，在 RegisterRoutes 中按需挂载）
 
@@ -63,8 +74,11 @@ func NewHTTPServer(config HTTPServerConfig) *HTTPServer {
 
 	// 配置底层 HTTP Server
 	srv.server = &http.Server{
-		Addr:    config.Addr,
-		Handler: srv.handler(),
+		Addr:         config.Addr,
+		Handler:      srv.handler(),
+		ReadTimeout:  15 * time.Second,
+		WriteTimeout: 60 * time.Second,
+		IdleTimeout:  120 * time.Second,
 	}
 
 	return srv

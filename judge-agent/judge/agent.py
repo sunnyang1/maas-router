@@ -9,6 +9,7 @@ import time
 import logging
 from typing import Optional, Dict, Any, List
 from dataclasses import dataclass, field
+from urllib.parse import urlparse
 
 import httpx
 import yaml
@@ -99,12 +100,19 @@ class JudgeConfig:
 class LLMClient:
     """HTTP client for LLM API calls."""
 
+    BLOCKED_HOSTS = {"169.254.169.254", "metadata.google.internal", "metadata.azure.com"}
+
     def __init__(
         self,
         api_url: str,
         api_key: Optional[str] = None,
         timeout: float = 30.0
     ):
+        parsed = urlparse(api_url)
+        if parsed.scheme not in ("http", "https"):
+            raise ValueError(f"Unsupported URL scheme: {parsed.scheme}")
+        if parsed.hostname in self.BLOCKED_HOSTS:
+            raise ValueError(f"Blocked host: {parsed.hostname}")
         self.api_url = api_url
         self.api_key = api_key
         self.timeout = timeout
@@ -301,7 +309,7 @@ class JudgeAgent:
             logger.warning(f"LLM health check failed: {e}")
             status["components"]["llm_client"] = "unhealthy"
             status["status"] = "degraded"
-            status["llm_error"] = str(e)
+            status["llm_error"] = "LLM connection failed"
 
         self._health_status = status
         return status

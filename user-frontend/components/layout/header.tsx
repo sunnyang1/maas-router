@@ -31,12 +31,21 @@ export function Header() {
       });
   }, []);
 
+  const isValidUrl = (url: string) => {
+    try {
+      const parsed = new URL(url);
+      return ['https:', 'http:'].includes(parsed.protocol);
+    } catch {
+      return false;
+    }
+  };
+
   const siteName = branding?.site_name || 'MaaS Router';
 
   return (
     <>
       {/* Announcement Bar */}
-      {branding?.announcement && (
+      {branding?.announcement && branding.announcement.length <= 500 && (
         <div
           className="text-center text-sm py-2 px-4"
           style={{
@@ -53,7 +62,7 @@ export function Header() {
           <div className="flex items-center justify-between h-16">
             {/* Logo */}
             <Link href="/" className="flex items-center gap-2">
-              {branding?.logo_url ? (
+              {branding?.logo_url && isValidUrl(branding.logo_url) ? (
                 <img
                   src={branding.logo_url}
                   alt={siteName}

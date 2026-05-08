@@ -189,9 +189,9 @@ export const useUserStore = create<UserState>()(
     }),
     {
       name: 'user-storage',
-      partialize: (state) => ({ 
-        user: state.user,
+      partialize: (state) => ({
         isAuthenticated: state.isAuthenticated,
+        // Do NOT persist user object with email, id, balance etc.
       }),
     }
   )

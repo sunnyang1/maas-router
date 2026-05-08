@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"crypto/subtle"
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -120,9 +121,12 @@ func validateJWTToken(tokenString string, config JWTAuthConfig) (*JWTClaims, err
 	return claims, nil
 }
 
-// parseToken 解析 JWT Token
+// parseToken 解析 JWT Token（带算法验证）
 func parseToken(tokenString string, claims *JWTClaims, secret string) (*jwt.Token, error) {
 	return jwt.ParseWithClaims(tokenString, claims, func(token *jwt.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("不支持的签名算法: %v", token.Header["alg"])
+		}
 		return []byte(secret), nil
 	})
 }
