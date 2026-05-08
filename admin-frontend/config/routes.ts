@@ -64,6 +64,24 @@ export default [
     component: './monitoring',
   },
   {
+    path: '/balance',
+    name: '账号余额',
+    icon: 'WalletOutlined',
+    component: './balance',
+  },
+  {
+    path: '/channel-test',
+    name: '渠道测试',
+    icon: 'ApiOutlined',
+    component: './channel-test',
+  },
+  {
+    path: '/branding',
+    name: '品牌设置',
+    icon: 'SkinOutlined',
+    component: './branding',
+  },
+  {
     path: '/system',
     name: '系统设置',
     icon: 'SettingOutlined',

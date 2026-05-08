@@ -31,6 +31,8 @@ type OpenAIGatewayHandler struct {
 	ModelService ModelService
 	// RouterService 路由服务（自动路由到 Claude/OpenAI）
 	RouterService RouterService
+	// ModelMappingService 模型映射服务
+	ModelMappingService ModelMappingService
 }
 
 // NewOpenAIGatewayHandler 创建 OpenAI API 兼容网关 Handler
@@ -41,14 +43,16 @@ func NewOpenAIGatewayHandler(
 	proxyService ProxyService,
 	modelService ModelService,
 	routerService RouterService,
+	modelMappingService ModelMappingService,
 ) *OpenAIGatewayHandler {
 	return &OpenAIGatewayHandler{
-		AccountService:   accountService,
-		ComplexityService: complexityService,
-		BillingService:   billingService,
-		ProxyService:     proxyService,
-		ModelService:     modelService,
-		RouterService:    routerService,
+		AccountService:      accountService,
+		ComplexityService:   complexityService,
+		BillingService:      billingService,
+		ProxyService:        proxyService,
+		ModelService:        modelService,
+		RouterService:       routerService,
+		ModelMappingService: modelMappingService,
 	}
 }
 
@@ -318,61 +322,74 @@ func (h *OpenAIGatewayHandler) ChatCompletions(c *gin.Context) {
 		}
 	}
 
+	// 应用模型映射
+	if h.ModelMappingService != nil {
+		req.Model = h.ModelMappingService.ResolveMapping(req.Model)
+	}
+
 	// 确定目标平台（自动路由）
 	targetPlatform := h.determineTargetPlatform(req.Model)
 
-	// 选择最优上游账号
-	account, err := h.AccountService.SelectAccount(c.Request.Context(), &AccountSelectRequest{
-		Model:       req.Model,
-		Platform:    targetPlatform,
-		UserID:      apiKey.UserID,
-		APIKeyID:    apiKey.ID,
-		RoutingTier: getComplexityTier(complexityProfile),
-	})
-	if err != nil {
-		ErrorResponse(c, http.StatusServiceUnavailable, "NO_AVAILABLE_ACCOUNT", "暂无可用的上游账号")
-		return
-	}
+	// 选择最优上游账号（带重试）
+	retryConfig := DefaultRetryConfig()
 
-	// 根据目标平台构建请求
-	var upstreamURL string
-	var headers map[string]string
-
-	if targetPlatform == "claude" {
-		// 转换为 Claude 格式
-		upstreamURL = fmt.Sprintf("%s/v1/messages", account.BaseURL)
-		headers = h.buildClaudeHeaders(account)
-		bodyBytes, err = h.convertOpenAIToClaude(&req)
-		if err != nil {
-			ErrorResponse(c, http.StatusInternalServerError, "CONVERSION_ERROR", "请求格式转换失败")
-			return
-		}
-	} else {
-		// 保持 OpenAI 格式
-		upstreamURL = fmt.Sprintf("%s/v1/chat/completions", account.BaseURL)
-		headers = h.buildOpenAIHeaders(account)
-	}
-
-	// 构建上游请求
+	// 构建上游请求模板
 	upstreamReq := &ProxyRequest{
 		Method:    http.MethodPost,
-		URL:       upstreamURL,
-		Headers:   headers,
+		Headers:   nil, // 将在 selectAccountFunc 中根据账号动态设置
 		Body:      bodyBytes,
 		Stream:    req.Stream,
-		AccountID: account.ID,
 		RequestID: requestID,
 		Model:     req.Model,
 		UserID:    apiKey.UserID,
 		APIKeyID:  apiKey.ID,
 	}
 
-	// 发送请求到上游
-	resp, err := h.ProxyService.DoRequest(c.Request.Context(), upstreamReq)
-	if err != nil {
-		ErrorResponse(c, http.StatusBadGateway, "UPSTREAM_ERROR", fmt.Sprintf("上游服务错误: %v", err))
+	result := DoRequestWithRetry(
+		c.Request.Context(),
+		upstreamReq,
+		func(ctx context.Context, excluded []string) (*Account, error) {
+			account, err := h.AccountService.SelectAccount(ctx, &AccountSelectRequest{
+				Model:             req.Model,
+				Platform:          targetPlatform,
+				UserID:            apiKey.UserID,
+				APIKeyID:          apiKey.ID,
+				RoutingTier:       getComplexityTier(complexityProfile),
+				ExcludedAccountIDs: excluded,
+			})
+			if err != nil {
+				return nil, err
+			}
+
+			// 根据目标平台构建请求
+			if targetPlatform == "claude" {
+				// 转换为 Claude 格式
+				upstreamReq.URL = fmt.Sprintf("%s/v1/messages", account.BaseURL)
+				upstreamReq.Headers = h.buildClaudeHeaders(account)
+				convertedBody, convertErr := h.convertOpenAIToClaude(&req)
+				if convertErr != nil {
+					return nil, fmt.Errorf("请求格式转换失败: %w", convertErr)
+				}
+				upstreamReq.Body = convertedBody
+			} else {
+				// 保持 OpenAI 格式
+				upstreamReq.URL = fmt.Sprintf("%s/v1/chat/completions", account.BaseURL)
+				upstreamReq.Headers = h.buildOpenAIHeaders(account)
+			}
+			upstreamReq.AccountID = account.ID
+			return account, nil
+		},
+		h.ProxyService,
+		retryConfig,
+	)
+
+	if result.Response == nil {
+		ErrorResponse(c, http.StatusBadGateway, "UPSTREAM_ERROR",
+			fmt.Sprintf("上游服务错误（已重试 %d 次）: %v", result.Attempt-1, result.LastError))
 		return
 	}
+	resp := result.Response
+	account = result.Account
 	defer resp.Body.Close()
 
 	// 处理流式响应
@@ -913,6 +930,12 @@ func (h *OpenAIGatewayHandler) recordUsage(c *gin.Context, account *Account, api
 type RouterService interface {
 	// RouteRequest 路由请求到合适的平台
 	RouteRequest(ctx interface{}, req *ChatCompletionRequest) (platform string, err error)
+}
+
+// ModelMappingService 模型映射服务接口
+type ModelMappingService interface {
+	// ResolveMapping 解析模型映射
+	ResolveMapping(model string) string
 }
 
 // RegisterOpenAIHandlers 注册 OpenAI API 兼容路由到 HandlerGroup

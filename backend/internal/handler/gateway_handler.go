@@ -14,6 +14,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"maas-router/internal/pkg/ctxkey"
+	"maas-router/internal/service"
 )
 
 // GatewayHandler Claude API 兼容网关 Handler
@@ -31,6 +32,8 @@ type GatewayHandler struct {
 	ProxyService ProxyService
 	// ModelService 模型信息服务
 	ModelService ModelService
+	// TokenCounter Token 计数器（用于本地估算）
+	TokenCounter service.TokenCounter
 }
 
 // NewGatewayHandler 创建 Claude API 兼容网关 Handler
@@ -41,6 +44,7 @@ func NewGatewayHandler(
 	billingService BillingService,
 	proxyService ProxyService,
 	modelService ModelService,
+	tokenCounter service.TokenCounter,
 ) *GatewayHandler {
 	return &GatewayHandler{
 		AccountService:    accountService,
@@ -49,6 +53,7 @@ func NewGatewayHandler(
 		BillingService:    billingService,
 		ProxyService:      proxyService,
 		ModelService:      modelService,
+		TokenCounter:      tokenCounter,
 	}
 }
 
@@ -262,40 +267,54 @@ func (h *GatewayHandler) Messages(c *gin.Context) {
 		complexity, _ = h.JudgeAgentService.GetComplexityScore(c.Request.Context(), &req)
 	}
 
-	// 选择最优上游账号
-	account, err := h.AccountService.SelectAccount(c.Request.Context(), &AccountSelectRequest{
-		Model:      req.Model,
-		Platform:   "claude",
-		Complexity: complexity,
-		UserID:     apiKey.UserID,
-		APIKeyID:   apiKey.ID,
-		RoutingTier: getComplexityTier(complexityProfile),
-	})
-	if err != nil {
-		ErrorResponse(c, http.StatusServiceUnavailable, "NO_AVAILABLE_ACCOUNT", "暂无可用的上游账号")
-		return
-	}
+	// 选择最优上游账号（带重试）
+	retryConfig := DefaultRetryConfig()
 
-	// 构建上游请求
+	// 构建上游请求模板
 	upstreamReq := &ProxyRequest{
-		Method:      http.MethodPost,
-		URL:         fmt.Sprintf("%s/v1/messages", account.BaseURL),
-		Headers:     h.buildClaudeHeaders(account, apiKey),
-		Body:        bodyBytes,
-		Stream:      req.Stream,
-		AccountID:   account.ID,
-		RequestID:   requestID,
-		Model:       req.Model,
-		UserID:      apiKey.UserID,
-		APIKeyID:    apiKey.ID,
+		Method:    http.MethodPost,
+		Headers:   nil, // 将在 selectAccountFunc 中根据账号动态设置
+		Body:      bodyBytes,
+		Stream:    req.Stream,
+		RequestID: requestID,
+		Model:     req.Model,
+		UserID:    apiKey.UserID,
+		APIKeyID:  apiKey.ID,
 	}
 
-	// 发送请求到上游
-	resp, err := h.ProxyService.DoRequest(c.Request.Context(), upstreamReq)
-	if err != nil {
-		ErrorResponse(c, http.StatusBadGateway, "UPSTREAM_ERROR", fmt.Sprintf("上游服务错误: %v", err))
+	result := DoRequestWithRetry(
+		c.Request.Context(),
+		upstreamReq,
+		func(ctx context.Context, excluded []string) (*Account, error) {
+			account, err := h.AccountService.SelectAccount(ctx, &AccountSelectRequest{
+				Model:             req.Model,
+				Platform:          "claude",
+				Complexity:        complexity,
+				UserID:            apiKey.UserID,
+				APIKeyID:          apiKey.ID,
+				RoutingTier:       getComplexityTier(complexityProfile),
+				ExcludedAccountIDs: excluded,
+			})
+			if err != nil {
+				return nil, err
+			}
+			// 动态设置上游 URL 和请求头
+			upstreamReq.URL = fmt.Sprintf("%s/v1/messages", account.BaseURL)
+			upstreamReq.Headers = h.buildClaudeHeaders(account, apiKey)
+			upstreamReq.AccountID = account.ID
+			return account, nil
+		},
+		h.ProxyService,
+		retryConfig,
+	)
+
+	if result.Response == nil {
+		ErrorResponse(c, http.StatusBadGateway, "UPSTREAM_ERROR",
+			fmt.Sprintf("上游服务错误（已重试 %d 次）: %v", result.Attempt-1, result.LastError))
 		return
 	}
+	resp := result.Response
+	account = result.Account
 	defer resp.Body.Close()
 
 	// 处理流式响应
@@ -413,6 +432,7 @@ func (h *GatewayHandler) handleStreamResponse(c *gin.Context, resp *http.Respons
 
 	var totalInputTokens, totalOutputTokens int
 	var lastEvent ClaudeStreamEvent
+	var streamedContent strings.Builder // accumulate streamed text for local token counting
 
 	// 流式转发
 	for {
@@ -445,6 +465,11 @@ func (h *GatewayHandler) handleStreamResponse(c *gin.Context, resp *http.Respons
 					totalInputTokens = event.Usage.InputTokens
 					totalOutputTokens = event.Usage.OutputTokens
 				}
+
+				// 累积流式文本内容用于本地 token 估算
+				if event.Delta != nil && event.Delta.Text != "" {
+					streamedContent.WriteString(event.Delta.Text)
+				}
 			}
 
 			// 转发给客户端
@@ -455,6 +480,14 @@ func (h *GatewayHandler) handleStreamResponse(c *gin.Context, resp *http.Respons
 			eventType := strings.TrimPrefix(line, "event: ")
 			fmt.Fprintf(writer, "event: %s\n", eventType)
 		}
+	}
+
+	// 如果上游未提供 token 使用量，使用本地 token 计数器估算
+	if totalInputTokens == 0 && totalOutputTokens == 0 && h.TokenCounter != nil {
+		// 估算输出 token（基于累积的流式内容）
+		totalOutputTokens = h.TokenCounter.CountTokens(streamedContent.String())
+		// 输入 token 保持为 0，因为我们在流式场景下无法轻易获取原始输入
+		// 但如果需要，可以从请求中估算
 	}
 
 	// 记录使用量和计费
@@ -659,12 +692,13 @@ type AccountService interface {
 
 // AccountSelectRequest 账号选择请求
 type AccountSelectRequest struct {
-	Model       string
-	Platform    string
-	Complexity  float64
-	UserID      string
-	APIKeyID    string
-	RoutingTier string // 复杂度分析推荐的路由层级
+	Model             string
+	Platform          string
+	Complexity        float64
+	UserID            string
+	APIKeyID          string
+	RoutingTier       string // 复杂度分析推荐的路由层级
+	ExcludedAccountIDs []string // 排除的账号 ID 列表（用于重试时避免重用失败账号）
 }
 
 // Account 上游账号信息

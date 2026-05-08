@@ -29,6 +29,15 @@ var ProviderSet = wire.NewSet(
 	// 复杂度分析 Handler
 	NewComplexityHandler,
 
+	// 余额查询 Handler
+	NewBalanceHandler,
+
+	// 渠道测试 Handler
+	NewChannelTestHandler,
+
+	// 品牌设置 Handler
+	NewBrandingHandler,
+
 	// Handler 组装器
 	NewHandlerAssembler,
 )
@@ -55,6 +64,15 @@ type HandlerAssembler struct {
 
 	// 复杂度分析 Handler
 	ComplexityHandler *ComplexityHandler
+
+	// 余额查询 Handler
+	BalanceHandler *BalanceHandler
+
+	// 渠道测试 Handler
+	ChannelTestHandler *ChannelTestHandler
+
+	// 品牌设置 Handler
+	BrandingHandler *BrandingHandler
 }
 
 // NewHandlerAssembler 创建 Handler 组装器
@@ -67,6 +85,9 @@ func NewHandlerAssembler(
 	apiKeyHandler *APIKeyHandler,
 	usageHandler *UsageHandler,
 	complexityHandler *ComplexityHandler,
+	balanceHandler *BalanceHandler,
+	channelTestHandler *ChannelTestHandler,
+	brandingHandler *BrandingHandler,
 ) *HandlerAssembler {
 	return &HandlerAssembler{
 		GatewayHandler:       gatewayHandler,
@@ -77,6 +98,9 @@ func NewHandlerAssembler(
 		APIKeyHandler:        apiKeyHandler,
 		UsageHandler:         usageHandler,
 		ComplexityHandler:    complexityHandler,
+		BalanceHandler:       balanceHandler,
+		ChannelTestHandler:   channelTestHandler,
+		BrandingHandler:      brandingHandler,
 	}
 }
 
@@ -126,6 +150,21 @@ func (a *HandlerAssembler) HandlerGroup() HandlerGroup {
 		ComplexityStats:    a.ComplexityHandler.Stats,
 		ComplexityFeedback: a.ComplexityHandler.Feedback,
 		ComplexityTiers:    a.ComplexityHandler.ModelTiers,
+
+		// 余额查询 Handler
+		GetAccountBalance:    a.BalanceHandler.GetBalance,
+		GetAllBalances:       a.BalanceHandler.GetAllBalances,
+		RefreshAccountBalance: a.BalanceHandler.RefreshBalance,
+
+		// 渠道测试 Handler
+		TestAccount:    a.ChannelTestHandler.TestAccount,
+		TestAllAccounts: a.ChannelTestHandler.TestAllAccounts,
+		GetTestResults: a.ChannelTestHandler.GetTestResults,
+
+		// 品牌设置 Handler
+		GetBranding:       a.BrandingHandler.GetBranding,
+		UpdateBranding:    a.BrandingHandler.UpdateBranding,
+		GetPublicBranding: a.BrandingHandler.GetPublicBranding,
 	}
 }
 
@@ -219,4 +258,19 @@ type HandlerGroup struct {
 	ComplexityStats    gin.HandlerFunc
 	ComplexityFeedback gin.HandlerFunc
 	ComplexityTiers    gin.HandlerFunc
+
+	// 余额查询 handler
+	GetAccountBalance    gin.HandlerFunc
+	GetAllBalances       gin.HandlerFunc
+	RefreshAccountBalance gin.HandlerFunc
+
+	// 渠道测试 handler
+	TestAccount    gin.HandlerFunc
+	TestAllAccounts gin.HandlerFunc
+	GetTestResults gin.HandlerFunc
+
+	// 品牌设置 handler
+	GetBranding       gin.HandlerFunc
+	UpdateBranding    gin.HandlerFunc
+	GetPublicBranding gin.HandlerFunc
 }

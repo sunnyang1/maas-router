@@ -77,6 +77,10 @@ func (Account) Fields() []ent.Field {
 		field.JSON("extra", map[string]interface{}{}).
 			Optional().
 			Comment("扩展信息，JSON格式"),
+		// ===== 分组权限字段 =====
+		field.JSON("allowed_groups", []string{"default"}).
+			Optional().
+			Comment("允许访问的用户分组列表，JSON 数组格式"),
 		field.Time("created_at").
 			Default(time.Now).
 			Immutable().

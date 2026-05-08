@@ -84,14 +84,36 @@ type HandlerGroup struct {
 	ComplexityStats      gin.HandlerFunc
 	ComplexityFeedback   gin.HandlerFunc
 	ComplexityTiers      gin.HandlerFunc
+
+	// 余额查询 handler
+	GetAccountBalance    gin.HandlerFunc
+	GetAllBalances       gin.HandlerFunc
+	RefreshAccountBalance gin.HandlerFunc
+
+	// 渠道测试 handler
+	TestAccount    gin.HandlerFunc
+	TestAllAccounts gin.HandlerFunc
+	GetTestResults gin.HandlerFunc
+
+	// 品牌设置 handler
+	GetBranding       gin.HandlerFunc
+	UpdateBranding    gin.HandlerFunc
+	GetPublicBranding gin.HandlerFunc
 }
 
 // RegisterCommonRoutes 注册通用路由（无需认证）
 // - GET /health 健康检查
 // - GET /setup/status 系统初始化状态
+// - GET /api/v1/branding 获取公开品牌设置
 func RegisterCommonRoutes(rg *gin.RouterGroup, h HandlerGroup) {
 	rg.GET("/health", wrapper(h.HealthCheck))
 	rg.GET("/setup/status", wrapper(h.SetupStatus))
+
+	// 公开品牌设置路由（前端使用）
+	v1 := rg.Group("/api/v1")
+	{
+		v1.GET("/branding", wrapper(h.GetPublicBranding))
+	}
 }
 
 // wrapper 是一个简单的 handler 包装器，确保 handler 不为 nil 时才注册

@@ -571,3 +571,87 @@ export async function getSystemStatus() {
     cpu: { usage: number };
   }>>('/api/v1/admin/system/status');
 }
+
+// ==================== 账号余额 ====================
+
+export interface BalanceInfo {
+  id: string;
+  accountName: string;
+  platform: string;
+  balance: number;
+  currency: string;
+  usedToday: number;
+  lastUpdated: string;
+  status: 'active' | 'inactive' | 'error';
+}
+
+export async function getAccountBalance(accountId: string) {
+  return request<ApiResponse<BalanceInfo>>(`/api/v1/admin/accounts/${accountId}/balance`);
+}
+
+export async function getAllBalances() {
+  return request<ApiResponse<BalanceInfo[]>>('/api/v1/admin/accounts/balances');
+}
+
+export async function refreshBalance(accountId?: string) {
+  const url = accountId
+    ? `/api/v1/admin/accounts/${accountId}/balance/refresh`
+    : '/api/v1/admin/accounts/balances/refresh';
+  return request<ApiResponse<BalanceInfo[]>>(url, {
+    method: 'POST',
+  });
+}
+
+// ==================== 渠道测试 ====================
+
+export interface ChannelTestResult {
+  id: string;
+  accountName: string;
+  platform: string;
+  status: 'healthy' | 'unhealthy' | 'unknown';
+  latency: number;
+  lastTest: string;
+  error: string;
+}
+
+export async function testAccountChannel(accountId: string) {
+  return request<ApiResponse<ChannelTestResult>>(`/api/v1/admin/accounts/${accountId}/test`, {
+    method: 'POST',
+  });
+}
+
+export async function testAllAccounts() {
+  return request<ApiResponse<ChannelTestResult[]>>('/api/v1/admin/accounts/test-all', {
+    method: 'POST',
+  });
+}
+
+export async function getTestResults() {
+  return request<ApiResponse<ChannelTestResult[]>>('/api/v1/admin/accounts/test-results');
+}
+
+// ==================== 品牌设置 ====================
+
+export interface BrandingSettings {
+  site_name: string;
+  logo_url: string;
+  favicon_url: string;
+  primary_color: string;
+  footer_text: string;
+  custom_css: string;
+  about_page: string;
+  announcement: string;
+  contact_email: string;
+  theme: 'light' | 'dark' | 'system';
+}
+
+export async function getBrandingSettings() {
+  return request<ApiResponse<BrandingSettings>>('/api/v1/admin/branding');
+}
+
+export async function updateBrandingSettings(data: Partial<BrandingSettings>) {
+  return request<ApiResponse<BrandingSettings>>('/api/v1/admin/branding', {
+    method: 'PUT',
+    data,
+  });
+}

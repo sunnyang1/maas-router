@@ -42,6 +42,15 @@ var ProviderSet = wire.NewSet(
 
 	// 复杂度分析服务
 	NewComplexityService,
+
+	// 余额查询服务
+	NewBalanceService,
+
+	// 渠道测试服务
+	NewChannelTestService,
+
+	// 品牌设置服务
+	NewBrandingService,
 )
 
 // ServiceRegistry 服务注册表
@@ -56,6 +65,9 @@ type ServiceRegistry struct {
 	APIKeyService      APIKeyService
 	RouterService      RouterService
 	ComplexityService  ComplexityService
+	BalanceService     BalanceService
+	ChannelTestService ChannelTestService
+	BrandingService    BrandingService
 }
 
 // NewServiceRegistry 创建服务注册表
@@ -70,6 +82,9 @@ func NewServiceRegistry(
 	apiKeyService APIKeyService,
 	routerService RouterService,
 	complexityService ComplexityService,
+	balanceService BalanceService,
+	channelTestService ChannelTestService,
+	brandingService BrandingService,
 ) *ServiceRegistry {
 	return &ServiceRegistry{
 		AccountService:     accountService,
@@ -81,6 +96,9 @@ func NewServiceRegistry(
 		APIKeyService:      apiKeyService,
 		RouterService:      routerService,
 		ComplexityService:  complexityService,
+		BalanceService:     balanceService,
+		ChannelTestService: channelTestService,
+		BrandingService:    brandingService,
 	}
 }
 
@@ -172,6 +190,15 @@ func (r *ServiceRegistry) HealthCheck(ctx context.Context) map[string]bool {
 	// 检查复杂度分析服务
 	results["complexity"] = r.ComplexityService != nil
 
+	// 检查余额查询服务
+	results["balance"] = r.BalanceService != nil
+
+	// 检查渠道测试服务
+	results["channel_test"] = r.ChannelTestService != nil
+
+	// 检查品牌设置服务
+	results["branding"] = r.BrandingService != nil
+
 	return results
 }
 
@@ -188,7 +215,10 @@ func (r *ServiceRegistry) GetServiceStats() map[string]interface{} {
 			"api_key_service",
 			"router_service",
 			"complexity_service",
+			"balance_service",
+			"channel_test_service",
+			"branding_service",
 		},
-		"total": 9,
+		"total": 12,
 	}
 }

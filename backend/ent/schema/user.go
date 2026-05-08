@@ -86,6 +86,12 @@ func (User) Fields() []ent.Field {
 		field.Int("invite_count").
 			Default(0).
 			Comment("成功邀请人数"),
+		// ===== 用户分组字段 =====
+		field.String("group_name").
+			Default("default").
+			Optional().
+			MaxLen(64).
+			Comment("用户所属分组名称"),
 		field.Time("created_at").
 			Default(time.Now).
 			Immutable().
@@ -140,6 +146,8 @@ func (User) Indexes() []ent.Index {
 		index.Fields("status", "last_active_at"),
 		// 复合索引：角色和状态（用于管理员查询）
 		index.Fields("role", "status"),
+		// 普通索引：分组名称（用于按分组筛选用户）
+		index.Fields("group_name"),
 		// 普通索引：创建时间（用于排序）
 		index.Fields("created_at"),
 	}

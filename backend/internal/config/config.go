@@ -28,6 +28,10 @@ type Config struct {
 	OAuth      OAuthConfig      `mapstructure:"oauth" json:"oauth" yaml:"oauth"`
 	Affiliate  AffiliateConfig  `mapstructure:"affiliate" json:"affiliate" yaml:"affiliate"`
 	RedeemCode RedeemCodeConfig `mapstructure:"redeem_code" json:"redeem_code" yaml:"redeem_code"`
+	Retry      RetryConfig      `mapstructure:"retry" json:"retry" yaml:"retry"`
+	HealthMonitor HealthMonitorConfig `mapstructure:"health_monitor" json:"health_monitor" yaml:"health_monitor"`
+	ChannelTest   ChannelTestConfig   `mapstructure:"channel_test" json:"channel_test" yaml:"channel_test"`
+	BalanceCheck  BalanceCheckConfig  `mapstructure:"balance_check" json:"balance_check" yaml:"balance_check"`
 }
 
 // ServerConfig HTTP 服务器配置
@@ -350,6 +354,50 @@ type RedeemCodeConfig struct {
 	CodeLength int `mapstructure:"code_length" json:"code_length" yaml:"code_length"`
 }
 
+// RetryConfig 网关重试配置
+type RetryConfig struct {
+	// 最大重试次数
+	MaxRetries int `mapstructure:"max_retries" json:"max_retries" yaml:"max_retries"`
+	// 初始退避时间（毫秒）
+	InitialBackoffMs int `mapstructure:"initial_backoff_ms" json:"initial_backoff_ms" yaml:"initial_backoff_ms"`
+	// 最大退避时间（毫秒）
+	MaxBackoffMs int `mapstructure:"max_backoff_ms" json:"max_backoff_ms" yaml:"max_backoff_ms"`
+	// 触发重试的 HTTP 状态码列表
+	RetryableStatusCodes []int `mapstructure:"retryable_status_codes" json:"retryable_status_codes" yaml:"retryable_status_codes"`
+}
+
+// HealthMonitorConfig 账号健康监控配置
+type HealthMonitorConfig struct {
+	// 是否启用健康监控
+	Enabled bool `mapstructure:"enabled" json:"enabled" yaml:"enabled"`
+	// 滑动窗口大小（记录数）
+	WindowSize int `mapstructure:"window_size" json:"window_size" yaml:"window_size"`
+	// 禁用阈值（成功率低于此值标记为不健康）
+	DisableThreshold float64 `mapstructure:"disable_threshold" json:"disable_threshold" yaml:"disable_threshold"`
+	// 恢复阈值（成功率高于此值恢复为健康）
+	RecoveryThreshold float64 `mapstructure:"recovery_threshold" json:"recovery_threshold" yaml:"recovery_threshold"`
+	// 清理间隔（秒）
+	CleanupIntervalSec int `mapstructure:"cleanup_interval_sec" json:"cleanup_interval_sec" yaml:"cleanup_interval_sec"`
+}
+
+// ChannelTestConfig 渠道测试配置
+type ChannelTestConfig struct {
+	// 是否启用渠道测试
+	Enabled bool `mapstructure:"enabled" json:"enabled" yaml:"enabled"`
+	// 测试频率（分钟）
+	FrequencyMin int `mapstructure:"frequency_min" json:"frequency_min" yaml:"frequency_min"`
+	// 测试超时时间（秒）
+	TimeoutSec int `mapstructure:"timeout_sec" json:"timeout_sec" yaml:"timeout_sec"`
+}
+
+// BalanceCheckConfig 余额检查配置
+type BalanceCheckConfig struct {
+	// 是否启用余额检查
+	Enabled bool `mapstructure:"enabled" json:"enabled" yaml:"enabled"`
+	// 检查频率（分钟）
+	FrequencyMin int `mapstructure:"frequency_min" json:"frequency_min" yaml:"frequency_min"`
+}
+
 // LoadConfig 加载应用配置
 // 按优先级: 命令行指定配置文件 > 环境变量 > 默认值
 // 环境变量使用 MAAS_ROUTER_ 前缀，层级用下划线分隔，例如: MAAS_ROUTER_SERVER_PORT=8080
@@ -535,6 +583,28 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("redeem_code.enabled", true)
 	v.SetDefault("redeem_code.code_prefix", "MR")
 	v.SetDefault("redeem_code.code_length", 16)
+
+	// 网关重试默认配置
+	v.SetDefault("retry.max_retries", 2)
+	v.SetDefault("retry.initial_backoff_ms", 100)
+	v.SetDefault("retry.max_backoff_ms", 1000)
+	v.SetDefault("retry.retryable_status_codes", []int{429, 500, 502, 503, 504})
+
+	// 账号健康监控默认配置
+	v.SetDefault("health_monitor.enabled", true)
+	v.SetDefault("health_monitor.window_size", 100)
+	v.SetDefault("health_monitor.disable_threshold", 0.8)
+	v.SetDefault("health_monitor.recovery_threshold", 0.9)
+	v.SetDefault("health_monitor.cleanup_interval_sec", 300)
+
+	// 渠道测试默认配置
+	v.SetDefault("channel_test.enabled", false)
+	v.SetDefault("channel_test.frequency_min", 30)
+	v.SetDefault("channel_test.timeout_sec", 30)
+
+	// 余额检查默认配置
+	v.SetDefault("balance_check.enabled", true)
+	v.SetDefault("balance_check.frequency_min", 60)
 }
 
 // Validate 校验配置的安全性和完整性

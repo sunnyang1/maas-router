@@ -27,11 +27,25 @@ import (
 //   - PUT    /api/v1/admin/accounts/:id  更新账户
 //   - DELETE /api/v1/admin/accounts/:id  删除账户
 //
+// 余额查询:
+//   - GET  /api/v1/admin/accounts/:id/balance        获取账户余额
+//   - GET  /api/v1/admin/accounts/balances            获取所有账户余额
+//   - POST /api/v1/admin/accounts/:id/balance/refresh 强制刷新余额
+//
+// 渠道测试:
+//   - POST /api/v1/admin/accounts/:id/test    测试单个账户
+//   - POST /api/v1/admin/accounts/test-all    测试所有账户
+//   - GET  /api/v1/admin/accounts/test-results 获取最新测试结果
+//
 // 路由规则管理:
 //   - GET    /api/v1/admin/router-rules       路由规则列表
 //   - POST   /api/v1/admin/router-rules       创建路由规则
 //   - PUT    /api/v1/admin/router-rules/:id   更新路由规则
 //   - DELETE /api/v1/admin/router-rules/:id   删除路由规则
+//
+// 品牌设置:
+//   - GET /api/v1/admin/branding  获取品牌设置
+//   - PUT /api/v1/admin/branding  更新品牌设置
 //
 // 运维:
 //   - GET /api/v1/admin/ops/realtime-traffic  实时流量
@@ -72,7 +86,21 @@ func RegisterAdminRoutes(rg *gin.RouterGroup, h HandlerGroup) {
 		accounts.GET("/:id", wrapper(h.GetAdminAccount))
 		accounts.PUT("/:id", wrapper(h.UpdateAdminAccount))
 		accounts.DELETE("/:id", wrapper(h.DeleteAdminAccount))
+
+		// 余额查询（在 accounts 路由组下）
+		accounts.GET("/:id/balance", wrapper(h.GetAccountBalance))
+		accounts.POST("/:id/balance/refresh", wrapper(h.RefreshAccountBalance))
+
+		// 渠道测试（在 accounts 路由组下）
+		accounts.POST("/:id/test", wrapper(h.TestAccount))
 	}
+
+	// 获取所有账户余额（独立路由，避免与 /:id 冲突）
+	admin.GET("/accounts/balances", wrapper(h.GetAllBalances))
+
+	// 渠道测试 - 批量测试和结果查询
+	admin.POST("/accounts/test-all", wrapper(h.TestAllAccounts))
+	admin.GET("/accounts/test-results", wrapper(h.GetTestResults))
 
 	// 路由规则管理
 	routerRules := admin.Group("/router-rules")
@@ -82,6 +110,13 @@ func RegisterAdminRoutes(rg *gin.RouterGroup, h HandlerGroup) {
 		routerRules.GET("/:id", wrapper(h.GetRouterRule))
 		routerRules.PUT("/:id", wrapper(h.UpdateRouterRule))
 		routerRules.DELETE("/:id", wrapper(h.DeleteRouterRule))
+	}
+
+	// 品牌设置
+	branding := admin.Group("/branding")
+	{
+		branding.GET("", wrapper(h.GetBranding))
+		branding.PUT("", wrapper(h.UpdateBranding))
 	}
 
 	// 运维接口
