@@ -8,12 +8,15 @@ RUN apk add --no-cache git ca-certificates tzdata
 
 WORKDIR /app
 
-# 复制 go.mod 和 go.sum
-COPY go.mod go.sum ./
+# 复制 go.mod
+COPY go.mod ./
 RUN go mod download
 
 # 复制源代码
 COPY . .
+
+# 生成 go.sum（如果不存在）
+RUN go mod tidy
 
 # 生成 Ent 代码
 RUN go install entgo.io/ent/cmd/ent@latest && go generate ./ent

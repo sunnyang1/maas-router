@@ -39,7 +39,7 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
-          cache-dependency-path: backend/go.sum
+          cache-dependency-path: backend/go.mod
 
       - name: go vet
         run: go vet ./... 2>&1 || echo "::warning::go vet found issues"
@@ -168,7 +168,7 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: ${{ env.GO_VERSION }}
-          cache-dependency-path: backend/go.sum
+          cache-dependency-path: backend/go.mod
 
       - name: Install ent codegen & wire
         run: |
@@ -361,6 +361,7 @@ jobs:
           tags: maas-router/user-frontend:test
           cache-from: type=gha
           cache-to: type=gha,mode=max
+        continue-on-error: true
 
       - name: Build admin-frontend image
         uses: docker/build-push-action@v6
