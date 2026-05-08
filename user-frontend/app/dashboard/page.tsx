@@ -47,8 +47,12 @@ export default function DashboardPage() {
     staleTime: 60000,
   });
 
-  // 模型使用分布数据（从 dashboard 数据中提取或使用默认值）
-  const modelUsageData = dashboardData?.modelUsage || [
+  // 模型使用分布数据（从 dashboard 路由分布中提取或使用默认值）
+  const modelUsageData = dashboardData?.routerDistribution?.map((item) => ({
+    name: item.name,
+    requests: item.value,
+    color: item.color,
+  })) || [
     { name: 'Economy', requests: 1240, color: '#14b8a6' },
     { name: 'Standard', requests: 856, color: '#ff6b35' },
     { name: 'Premium', requests: 312, color: '#f59e0b' },
