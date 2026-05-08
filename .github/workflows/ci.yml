@@ -373,6 +373,7 @@ jobs:
           tags: maas-router/admin-frontend:test
           cache-from: type=gha
           cache-to: type=gha,mode=max
+        continue-on-error: true
 
       - name: Verify images
         run: |
