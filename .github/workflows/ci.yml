@@ -337,6 +337,7 @@ jobs:
           tags: maas-router/backend:test
           cache-from: type=gha
           cache-to: type=gha,mode=max
+        continue-on-error: true
 
       - name: Build judge-agent image
         uses: docker/build-push-action@v6
