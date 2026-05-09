@@ -9,11 +9,13 @@ const nextConfig = {
   // Remove deprecated experimental.appDir (default in Next.js 14+)
 
   async rewrites() {
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
+    // 使用相对路径进行重写，由部署环境决定目标
+    // 当使用 Docker Compose 或 Kubernetes 时，
+    // 可以通过外部反向代理或 Next.js 的 API 路由来处理
     return [
       {
         source: '/api/v1/:path*',
-        destination: `${apiUrl}/api/v1/:path*`,
+        destination: '/api/v1/:path*',
       },
     ];
   },

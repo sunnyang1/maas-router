@@ -80,6 +80,10 @@ jobs:
       - name: ESLint
         run: npx next lint 2>/dev/null || echo "::warning::ESLint not fully configured, skipping"
 
+      - name: npm audit
+        run: npm audit --audit-level=high 2>&1 || echo "::warning::npm audit found vulnerabilities"
+        continue-on-error: true
+
   lint-admin-frontend:
     name: "🔍 Admin Frontend Lint (UmiJS)"
     runs-on: ubuntu-latest
@@ -102,6 +106,10 @@ jobs:
 
       - name: TypeScript type check
         run: npx tsc --noEmit 2>&1 || echo "::warning::TypeScript type check has errors"
+        continue-on-error: true
+
+      - name: npm audit
+        run: npm audit --audit-level=high 2>&1 || echo "::warning::npm audit found vulnerabilities"
         continue-on-error: true
 
   lint-judge-agent:
@@ -226,6 +234,10 @@ jobs:
           NEXT_PUBLIC_API_URL: http://localhost:8080
         continue-on-error: true
 
+      - name: npm audit
+        run: npm audit --audit-level=high 2>&1 || echo "::warning::npm audit found vulnerabilities"
+        continue-on-error: true
+
   test-admin-frontend:
     name: "🧪 Admin Frontend Build Check"
     runs-on: ubuntu-latest
@@ -247,6 +259,10 @@ jobs:
         run: npm run build 2>&1 || echo "::warning::Admin frontend build failed"
         env:
           UMI_ENV: production
+        continue-on-error: true
+
+      - name: npm audit
+        run: npm audit --audit-level=high 2>&1 || echo "::warning::npm audit found vulnerabilities"
         continue-on-error: true
 
   test-judge-agent:
@@ -302,16 +318,21 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
-      - run: cd user-frontend && npm audit --audit-level=high 2>/dev/null || echo "::warning::user-frontend npm vulnerabilities found"
+      - run: cd user-frontend && npm audit --audit-level=moderate 2>&1 || echo "::warning::user-frontend npm vulnerabilities found"
+        continue-on-error: true
 
       - name: Node.js dependency audit (admin-frontend)
-        run: cd admin-frontend && npm audit --audit-level=high 2>/dev/null || echo "::warning::admin-frontend npm vulnerabilities found"
+        run: cd admin-frontend && npm audit --audit-level=moderate 2>&1 || echo "::warning::admin-frontend npm vulnerabilities found"
+        continue-on-error: true
 
       - name: Python dependency audit (judge-agent)
         uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
-      - run: pip install pip-audit && pip-audit --requirement judge-agent/requirements.txt 2>/dev/null || echo "::warning::Python dependency vulnerabilities found"
+      - run: |
+          pip install pip-audit
+          pip-audit --requirement judge-agent/requirements.txt --desc --format=json 2>&1 || echo "::warning::Python dependency vulnerabilities found"
+        continue-on-error: true
 
   # ============================================
   # Stage 4: Docker 构建验证

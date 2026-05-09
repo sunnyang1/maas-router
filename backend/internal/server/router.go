@@ -4,6 +4,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/go-redis/redis/v8"
 
+	"maas-router/internal/cache"
 	"maas-router/internal/server/middleware"
 	"maas-router/internal/server/routes"
 )
@@ -22,6 +23,8 @@ type RouterConfig struct {
 	APIKeyLookupFunc middleware.APIKeyLookupFunc
 	// Redis 客户端（用于限流器）
 	RedisClient *redis.Client
+	// Token 黑名单服务（用于安全登出）
+	TokenBlacklist *cache.TokenBlacklist
 	// 是否启用简单模式（跳过计费）
 	SimpleMode bool
 	// 是否启用限流
@@ -64,7 +67,9 @@ func RegisterRoutes(engine *gin.Engine, config RouterConfig) {
 		Issuer: config.JWTIssuer,
 	}
 	jwtGroup := engine.Group("")
-	jwtGroup.Use(middleware.JWTAuth(jwtConfig))
+	// 使用带有 Token 黑名单检查的 JWT 中间件
+	jwtMiddleware := middleware.NewJWTAuthMiddleware(jwtConfig, config.TokenBlacklist)
+	jwtGroup.Use(jwtMiddleware.Middleware())
 	{
 		// 用户路由
 		routes.RegisterUserRoutes(jwtGroup, h)

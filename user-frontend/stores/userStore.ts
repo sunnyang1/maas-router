@@ -12,17 +12,11 @@ export interface User {
   createdAt?: string;
 }
 
-interface TokenInfo {
-  accessToken: string;
-  refreshToken: string;
-  expiresAt: number;
-}
-
 interface UserState {
   user: User | null;
   isAuthenticated: boolean;
   isLoading: boolean;
-  
+
   // Actions
   setUser: (user: User | null) => void;
   setLoading: (loading: boolean) => void;
@@ -103,11 +97,11 @@ export const useUserStore = create<UserState>()(
         } catch {
           // 即使 API 调用失败，也清除本地状态
         } finally {
-          apiClient.clearTokens();
-          set({ 
-            user: null, 
+          // Cookie 已由后端清除
+          set({
+            user: null,
             isAuthenticated: false,
-            isLoading: false 
+            isLoading: false
           });
         }
       },
@@ -141,25 +135,13 @@ export const useUserStore = create<UserState>()(
         })),
 
       checkAuth: async () => {
-        // 检查是否有 token
+        // 服务端渲染时返回 false
         if (typeof window === 'undefined') {
           return false;
         }
 
-        const accessToken = localStorage.getItem('access-token');
-        const refreshToken = localStorage.getItem('refresh-token');
-
-        if (!accessToken && !refreshToken) {
-          set({ 
-            isAuthenticated: false, 
-            user: null,
-            isLoading: false 
-          });
-          return false;
-        }
-
         try {
-          // 尝试获取用户信息
+          // 尝试获取用户信息 (Token 存储在 httpOnly cookie 中，会自动发送)
           const profile = await apiClient.getProfile();
           const user: User = {
             id: profile.id,
@@ -170,18 +152,18 @@ export const useUserStore = create<UserState>()(
             credBalance: profile.credBalance,
             createdAt: profile.createdAt,
           };
-          set({ 
-            user, 
+          set({
+            user,
             isAuthenticated: true,
-            isLoading: false 
+            isLoading: false
           });
           return true;
         } catch (error) {
           // Token 无效或过期
-          set({ 
-            isAuthenticated: false, 
+          set({
+            isAuthenticated: false,
             user: null,
-            isLoading: false 
+            isLoading: false
           });
           return false;
         }

@@ -9,6 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
 
+	"maas-router/internal/cache"
 	"maas-router/internal/pkg/ctxkey"
 )
 
@@ -22,6 +23,12 @@ type JWTClaims struct {
 	jwt.RegisteredClaims
 }
 
+// JWTAuthMiddleware JWT 认证中间件
+type JWTAuthMiddleware struct {
+	config         JWTAuthConfig
+	tokenBlacklist *cache.TokenBlacklist
+}
+
 // JWTAuthConfig JWT 认证中间件配置
 type JWTAuthConfig struct {
 	// JWT 签名密钥
@@ -30,37 +37,63 @@ type JWTAuthConfig struct {
 	Issuer string
 }
 
-// JWTAuth 创建 JWT 认证中间件
-// 从 Authorization: Bearer <token> 头部提取 JWT，
-// 验证 token 有效性和过期时间，检查 TokenVersion 确保改密后旧 token 失效。
+// NewJWTAuthMiddleware 创建 JWT 认证中间件实例
+func NewJWTAuthMiddleware(config JWTAuthConfig, tokenBlacklist *cache.TokenBlacklist) *JWTAuthMiddleware {
+	return &JWTAuthMiddleware{
+		config:         config,
+		tokenBlacklist: tokenBlacklist,
+	}
+}
+
+// Middleware 返回 Gin 中间件函数
+// 优先从 Cookie 读取 access-token，如果不存在则从 Authorization: Bearer <token> 头部提取。
+// 验证 token 有效性、检查黑名单、验证过期时间，检查 TokenVersion 确保改密后旧 token 失效。
 // 验证通过后将用户信息写入 Context。
-func JWTAuth(config JWTAuthConfig) gin.HandlerFunc {
+func (m *JWTAuthMiddleware) Middleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// 从 Authorization 头部提取 Bearer Token
-		authHeader := c.GetHeader("Authorization")
-		if authHeader == "" {
+		var tokenString string
+
+		// 优先从 Cookie 读取 access-token
+		cookieToken, err := c.Cookie("access-token")
+		if err == nil && cookieToken != "" {
+			tokenString = cookieToken
+		} else {
+			// 从 Authorization 头部提取 Bearer Token (兼容旧方式)
+			authHeader := c.GetHeader("Authorization")
+			if authHeader == "" {
+				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
+					"error": gin.H{
+						"code":    "UNAUTHORIZED",
+						"message": "缺少认证信息",
+					},
+				})
+				return
+			}
+
+			// 校验 Bearer 前缀
+			parts := strings.SplitN(authHeader, " ", 2)
+			if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
+				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
+					"error": gin.H{
+						"code":    "INVALID_TOKEN_FORMAT",
+						"message": "Authorization 头部格式错误，应为 Bearer <token>",
+					},
+				})
+				return
+			}
+
+			tokenString = parts[1]
+		}
+
+		if tokenString == "" {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
 				"error": gin.H{
 					"code":    "UNAUTHORIZED",
-					"message": "缺少 Authorization 头部",
+					"message": "缺少认证 Token",
 				},
 			})
 			return
 		}
-
-		// 校验 Bearer 前缀
-		parts := strings.SplitN(authHeader, " ", 2)
-		if len(parts) != 2 || !strings.EqualFold(parts[0], "Bearer") {
-			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
-				"error": gin.H{
-					"code":    "INVALID_TOKEN_FORMAT",
-					"message": "Authorization 头部格式错误，应为 Bearer <token>",
-				},
-			})
-			return
-		}
-
-		tokenString := parts[1]
 
 		// 解析并验证 JWT Token
 		claims := &JWTClaims{}
@@ -69,7 +102,7 @@ func JWTAuth(config JWTAuthConfig) gin.HandlerFunc {
 			if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 				return nil, errors.New("不支持的签名算法")
 			}
-			return []byte(config.Secret), nil
+			return []byte(m.config.Secret), nil
 		})
 
 		if err != nil {
@@ -102,12 +135,35 @@ func JWTAuth(config JWTAuthConfig) gin.HandlerFunc {
 		}
 
 		// 验证 Issuer（如果配置了）
-		if config.Issuer != "" {
-			if claims.Issuer != config.Issuer {
+		if m.config.Issuer != "" {
+			if claims.Issuer != m.config.Issuer {
 				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
 					"error": gin.H{
 						"code":    "INVALID_ISSUER",
 						"message": "Token 发行者不匹配",
+					},
+				})
+				return
+			}
+		}
+
+		// 检查 Token 是否在黑名单中
+		if m.tokenBlacklist != nil && claims.ID != "" {
+			isBlacklisted, err := m.tokenBlacklist.IsBlacklisted(c.Request.Context(), claims.ID)
+			if err != nil {
+				c.AbortWithStatusJSON(http.StatusInternalServerError, gin.H{
+					"error": gin.H{
+						"code":    "INTERNAL_ERROR",
+						"message": "检查 Token 黑名单失败",
+					},
+				})
+				return
+			}
+			if isBlacklisted {
+				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
+					"error": gin.H{
+						"code":    "TOKEN_REVOKED",
+						"message": "Token 已被撤销，请重新登录",
 					},
 				})
 				return
@@ -123,4 +179,13 @@ func JWTAuth(config JWTAuthConfig) gin.HandlerFunc {
 
 		c.Next()
 	}
+}
+
+// JWTAuth 创建 JWT 认证中间件（兼容旧版函数签名）
+// 从 Authorization: Bearer <token> 头部提取 JWT，
+// 验证 token 有效性和过期时间，检查 TokenVersion 确保改密后旧 token 失效。
+// 验证通过后将用户信息写入 Context。
+// 注意：此函数不检查 Token 黑名单，如需黑名单检查请使用 NewJWTAuthMiddleware
+func JWTAuth(config JWTAuthConfig) gin.HandlerFunc {
+	return NewJWTAuthMiddleware(config, nil).Middleware()
 }

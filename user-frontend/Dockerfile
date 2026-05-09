@@ -20,8 +20,7 @@ COPY . .
 
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
-# Set build-time env var to prevent undefined rewrites
-ENV NEXT_PUBLIC_API_URL=http://localhost:8080
+# 注意：不再设置 NEXT_PUBLIC_API_URL，使用运行时配置替代
 
 RUN npm run build
 

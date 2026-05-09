@@ -99,12 +99,16 @@ type HandlerGroup struct {
 	GetBranding       gin.HandlerFunc
 	UpdateBranding    gin.HandlerFunc
 	GetPublicBranding gin.HandlerFunc
+
+	// 配置 handler
+	GetPublicConfig gin.HandlerFunc
 }
 
 // RegisterCommonRoutes 注册通用路由（无需认证）
 // - GET /health 健康检查
 // - GET /setup/status 系统初始化状态
 // - GET /api/v1/branding 获取公开品牌设置
+// - GET /api/v1/public/config 获取公开配置
 func RegisterCommonRoutes(rg *gin.RouterGroup, h HandlerGroup) {
 	rg.GET("/health", wrapper(h.HealthCheck))
 	rg.GET("/setup/status", wrapper(h.SetupStatus))
@@ -113,6 +117,7 @@ func RegisterCommonRoutes(rg *gin.RouterGroup, h HandlerGroup) {
 	v1 := rg.Group("/api/v1")
 	{
 		v1.GET("/branding", wrapper(h.GetPublicBranding))
+		v1.GET("/public/config", wrapper(h.GetPublicConfig))
 	}
 }
 

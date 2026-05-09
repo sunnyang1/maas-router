@@ -1,15 +1,8 @@
 import axios, { AxiosInstance, AxiosError } from 'axios';
+import { getApiBaseUrl, getRuntimeConfig, initRuntimeConfig } from './runtime-config';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.maas-router.com';
-
-// Token 管理类型
-interface TokenResponse {
-  accessToken: string;
-  refreshToken: string;
-  expiresIn: number;
-}
-
-interface AuthResponse extends TokenResponse {
+// 认证响应类型 (Token 现在存储在 httpOnly cookie 中)
+interface AuthResponse {
   user: {
     id: string;
     email: string;
@@ -101,24 +94,65 @@ export interface DashboardData {
 class ApiClient {
   public client: AxiosInstance;
   private refreshPromise: Promise<void> | null = null;
+  private baseUrl: string = '';
+  private initialized: boolean = false;
 
   constructor() {
+    // 初始化时使用环境变量或空字符串
+    this.baseUrl = process.env.NEXT_PUBLIC_API_URL || '';
+
     this.client = axios.create({
-      baseURL: `${API_BASE_URL}/api/v1`,
+      baseURL: this.getBaseUrl(),
       headers: {
         'Content-Type': 'application/json',
       },
       timeout: 30000,
       maxContentLength: 10 * 1024 * 1024, // 10MB
       maxBodyLength: 10 * 1024 * 1024,    // 10MB
+      withCredentials: true, // 允许携带 cookies (包括 httpOnly cookies)
     });
 
-    // Request interceptor - 添加 JWT Token
+    this.setupInterceptors();
+  }
+
+  /**
+   * 获取 API 基础 URL
+   * 优先使用运行时配置，其次使用构建时环境变量
+   */
+  private getBaseUrl(): string {
+    const apiUrl = getApiBaseUrl();
+    return apiUrl ? `${apiUrl}/api/v1` : '/api/v1';
+  }
+
+  /**
+   * 初始化运行时配置
+   * 应在应用启动时调用
+   */
+  public async init(): Promise<void> {
+    if (this.initialized) return;
+
+    // 加载运行时配置
+    await getRuntimeConfig();
+
+    // 更新 baseURL
+    const newBaseUrl = this.getBaseUrl();
+    if (newBaseUrl !== this.client.defaults.baseURL) {
+      this.client.defaults.baseURL = newBaseUrl;
+    }
+
+    this.initialized = true;
+  }
+
+  /**
+   * 设置请求和响应拦截器
+   */
+  private setupInterceptors(): void {
+    // Request interceptor - 确保配置已初始化
     this.client.interceptors.request.use(
-      (config) => {
-        const accessToken = this.getAccessToken();
-        if (accessToken) {
-          config.headers.Authorization = `Bearer ${accessToken}`;
+      async (config) => {
+        // 确保配置已初始化
+        if (!this.initialized && typeof window !== 'undefined') {
+          await this.init();
         }
         return config;
       },
@@ -130,12 +164,11 @@ class ApiClient {
       (response) => response,
       async (error: AxiosError) => {
         const originalRequest = error.config as any;
-        
+
         // 如果是 401 错误且不是刷新 Token 的请求
         if (error.response?.status === 401 && !originalRequest._retry) {
           // 如果是刷新 Token 失败，直接登出
           if (originalRequest.url?.includes('/auth/refresh')) {
-            this.clearTokens();
             if (typeof window !== 'undefined') {
               window.location.href = '/login';
             }
@@ -152,15 +185,10 @@ class ApiClient {
             await this.refreshPromise;
             this.refreshPromise = null;
 
-            // 使用新的 Token 重试原请求
-            const accessToken = this.getAccessToken();
-            if (accessToken) {
-              originalRequest.headers.Authorization = `Bearer ${accessToken}`;
-            }
+            // 重试原请求 (cookie 会自动携带)
             return this.client(originalRequest);
           } catch (refreshError) {
             this.refreshPromise = null;
-            this.clearTokens();
             if (typeof window !== 'undefined') {
               window.location.href = '/login';
             }
@@ -173,65 +201,54 @@ class ApiClient {
     );
   }
 
-  // Token 管理
-  private getAccessToken(): string | null {
-    if (typeof window === 'undefined') return null;
-    return localStorage.getItem('access-token');
-  }
-
-  private getRefreshToken(): string | null {
-    if (typeof window === 'undefined') return null;
-    return localStorage.getItem('refresh-token');
-  }
-
-  private setTokens(accessToken: string, refreshToken: string) {
-    if (typeof window === 'undefined') return;
-    localStorage.setItem('access-token', accessToken);
-    localStorage.setItem('refresh-token', refreshToken);
-  }
-
+  // 清除 API Key (Token 现在存储在 httpOnly cookie 中，由后端管理)
   clearTokens() {
     if (typeof window === 'undefined') return;
-    localStorage.removeItem('access-token');
-    localStorage.removeItem('refresh-token');
     localStorage.removeItem('api-key');
   }
 
   private async refreshAccessToken(): Promise<void> {
-    const refreshToken = this.getRefreshToken();
-    if (!refreshToken) {
-      throw new Error('No refresh token available');
-    }
+    const baseUrl = getApiBaseUrl();
+    const apiBaseUrl = baseUrl ? `${baseUrl}/api/v1` : '/api/v1';
 
-    const response = await axios.post<TokenResponse>(
-      `${API_BASE_URL}/api/v1/auth/refresh`,
-      { refreshToken },
-      { headers: { 'Content-Type': 'application/json' } }
+    // 使用 withCredentials 发送请求，后端会从 cookie 中读取 refresh token
+    await axios.post(
+      `${apiBaseUrl}/auth/refresh`,
+      {},
+      {
+        headers: { 'Content-Type': 'application/json' },
+        withCredentials: true,
+      }
     );
+    // 新的 access token 会通过 httpOnly cookie 自动设置
+  }
 
-    this.setTokens(response.data.accessToken, response.data.refreshToken);
+  /**
+   * 获取网关 API 基础 URL（用于流式请求）
+   */
+  private getGatewayBaseUrl(): string {
+    const baseUrl = getApiBaseUrl();
+    return baseUrl || '';
   }
 
   // ==================== 认证 API ====================
 
   async register(email: string, password: string, name: string): Promise<AuthResponse> {
-    const response = await this.client.post<AuthResponse>('/auth/register', { 
-      email, 
-      password, 
-      name 
+    const response = await this.client.post<AuthResponse>('/auth/register', {
+      email,
+      password,
+      name
     });
-    const { accessToken, refreshToken } = response.data;
-    this.setTokens(accessToken, refreshToken);
+    // Token 已通过 httpOnly cookie 自动设置，无需手动存储
     return response.data;
   }
 
   async login(email: string, password: string): Promise<AuthResponse> {
-    const response = await this.client.post<AuthResponse>('/auth/login', { 
-      email, 
-      password 
+    const response = await this.client.post<AuthResponse>('/auth/login', {
+      email,
+      password
     });
-    const { accessToken, refreshToken } = response.data;
-    this.setTokens(accessToken, refreshToken);
+    // Token 已通过 httpOnly cookie 自动设置，无需手动存储
     return response.data;
   }
 
@@ -239,6 +256,7 @@ class ApiClient {
     try {
       await this.client.post('/auth/logout');
     } finally {
+      // Cookie 已由后端清除，前端只需清理本地状态
       this.clearTokens();
     }
   }
@@ -249,9 +267,9 @@ class ApiClient {
   }
 
   async resetPassword(token: string, password: string): Promise<{ message: string }> {
-    const response = await this.client.post('/auth/reset-password', { 
-      token, 
-      password 
+    const response = await this.client.post('/auth/reset-password', {
+      token,
+      password
     });
     return response.data;
   }
@@ -280,9 +298,9 @@ class ApiClient {
     return response.data;
   }
 
-  async changePassword(data: { 
-    currentPassword: string; 
-    newPassword: string 
+  async changePassword(data: {
+    currentPassword: string;
+    newPassword: string
   }): Promise<{ message: string }> {
     const response = await this.client.put('/user/password', data);
     return response.data;
@@ -358,8 +376,8 @@ class ApiClient {
   async getUsageHistory(period: 'day' | 'week' | 'month'): Promise<{
     data: UsageRecord[];
   }> {
-    const response = await this.client.get('/usage', { 
-      params: { period } 
+    const response = await this.client.get('/usage', {
+      params: { period }
     });
     return response.data;
   }
@@ -373,9 +391,10 @@ class ApiClient {
     temperature?: number;
     max_tokens?: number;
   }, apiKey?: string): AsyncGenerator<any, void, unknown> {
-    const key = apiKey || localStorage.getItem('api-key') || '';
-    
-    const response = await fetch(`${API_BASE_URL}/v1/chat/completions`, {
+    const key = apiKey || (typeof window !== 'undefined' ? localStorage.getItem('api-key') : '') || '';
+    const baseUrl = this.getGatewayBaseUrl();
+
+    const response = await fetch(`${baseUrl}/v1/chat/completions`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -423,9 +442,10 @@ class ApiClient {
     temperature?: number;
     max_tokens?: number;
   }, apiKey?: string): Promise<any> {
-    const key = apiKey || localStorage.getItem('api-key') || '';
-    
-    const response = await fetch(`${API_BASE_URL}/v1/chat/completions`, {
+    const key = apiKey || (typeof window !== 'undefined' ? localStorage.getItem('api-key') : '') || '';
+    const baseUrl = this.getGatewayBaseUrl();
+
+    const response = await fetch(`${baseUrl}/v1/chat/completions`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -449,9 +469,10 @@ class ApiClient {
       owned_by: string;
     }>;
   }> {
-    const key = apiKey || localStorage.getItem('api-key') || '';
-    
-    const response = await fetch(`${API_BASE_URL}/v1/models`, {
+    const key = apiKey || (typeof window !== 'undefined' ? localStorage.getItem('api-key') : '') || '';
+    const baseUrl = this.getGatewayBaseUrl();
+
+    const response = await fetch(`${baseUrl}/v1/models`, {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${key}`,
@@ -469,9 +490,10 @@ class ApiClient {
     model: string;
     input: string | string[];
   }, apiKey?: string): Promise<any> {
-    const key = apiKey || localStorage.getItem('api-key') || '';
-    
-    const response = await fetch(`${API_BASE_URL}/v1/embeddings`, {
+    const key = apiKey || (typeof window !== 'undefined' ? localStorage.getItem('api-key') : '') || '';
+    const baseUrl = this.getGatewayBaseUrl();
+
+    const response = await fetch(`${baseUrl}/v1/embeddings`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -494,9 +516,10 @@ class ApiClient {
     n?: number;
     size?: string;
   }, apiKey?: string): Promise<any> {
-    const key = apiKey || localStorage.getItem('api-key') || '';
-    
-    const response = await fetch(`${API_BASE_URL}/v1/images/generations`, {
+    const key = apiKey || (typeof window !== 'undefined' ? localStorage.getItem('api-key') : '') || '';
+    const baseUrl = this.getGatewayBaseUrl();
+
+    const response = await fetch(`${baseUrl}/v1/images/generations`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -520,9 +543,10 @@ class ApiClient {
     max_tokens: number;
     system?: string;
   }, apiKey?: string): AsyncGenerator<any, void, unknown> {
-    const key = apiKey || localStorage.getItem('api-key') || '';
-    
-    const response = await fetch(`${API_BASE_URL}/v1/messages`, {
+    const key = apiKey || (typeof window !== 'undefined' ? localStorage.getItem('api-key') : '') || '';
+    const baseUrl = this.getGatewayBaseUrl();
+
+    const response = await fetch(`${baseUrl}/v1/messages`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -566,3 +590,9 @@ class ApiClient {
 }
 
 export const apiClient = new ApiClient();
+
+// 导出初始化函数，供应用启动时调用
+export const initApiClient = () => apiClient.init();
+
+// 导出运行时配置相关函数
+export { initRuntimeConfig, getRuntimeConfig, getApiBaseUrl } from './runtime-config';

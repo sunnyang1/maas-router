@@ -3,10 +3,13 @@ package handler
 
 import (
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/golang-jwt/jwt/v5"
 
+	"maas-router/internal/cache"
 	"maas-router/internal/pkg/ctxkey"
 )
 
@@ -21,6 +24,8 @@ type AuthHandler struct {
 	EmailService EmailService
 	// JWTConfig JWT 配置
 	JWTConfig *JWTConfig
+	// TokenBlacklist Token 黑名单服务
+	TokenBlacklist *cache.TokenBlacklist
 }
 
 // JWTConfig JWT 配置
@@ -36,12 +41,14 @@ func NewAuthHandler(
 	userService UserService,
 	emailService EmailService,
 	jwtConfig *JWTConfig,
+	tokenBlacklist *cache.TokenBlacklist,
 ) *AuthHandler {
 	return &AuthHandler{
-		AuthService:  authService,
-		UserService:  userService,
-		EmailService: emailService,
-		JWTConfig:    jwtConfig,
+		AuthService:    authService,
+		UserService:    userService,
+		EmailService:   emailService,
+		JWTConfig:      jwtConfig,
+		TokenBlacklist: tokenBlacklist,
 	}
 }
 
@@ -66,8 +73,7 @@ type LoginRequest struct {
 
 // LoginResponse 登录响应
 type LoginResponse struct {
-	User  *UserInfo  `json:"user"`
-	Token *TokenInfo `json:"token"`
+	User *UserInfo `json:"user"`
 }
 
 // TokenInfo Token 信息
@@ -175,7 +181,7 @@ func (h *AuthHandler) Register(c *gin.Context) {
 }
 
 // Login 处理 POST /api/v1/auth/login
-// 用户登录接口
+// 用户登录接口 - 使用 httpOnly Cookie 存储 Token
 func (h *AuthHandler) Login(c *gin.Context) {
 	var req LoginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -206,6 +212,13 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	// 更新最后活跃时间
 	go h.UserService.UpdateLastActive(c.Request.Context(), user.ID)
 
+	// 设置 httpOnly Cookie
+	// Access Token: 15 分钟
+	c.SetSameSite(http.SameSiteLaxMode)
+	c.SetCookie("access-token", token.AccessToken, 15*60, "/", "", true, true)
+	// Refresh Token: 7 天
+	c.SetCookie("refresh-token", token.RefreshToken, 7*24*60*60, "/", "", true, true)
+
 	c.JSON(http.StatusOK, LoginResponse{
 		User: &UserInfo{
 			ID:        user.ID,
@@ -216,49 +229,113 @@ func (h *AuthHandler) Login(c *gin.Context) {
 			Balance:   user.Balance,
 			CreatedAt: user.CreatedAt,
 		},
-		Token: &TokenInfo{
-			AccessToken:  token.AccessToken,
-			RefreshToken: token.RefreshToken,
-			ExpiresIn:    token.ExpiresIn,
-			TokenType:    "Bearer",
-		},
 	})
 }
 
 // RefreshToken 处理 POST /api/v1/auth/refresh
-// 刷新 Token 接口
+// 刷新 Token 接口 - 从 Cookie 读取 refresh token，设置新的 access token cookie
 func (h *AuthHandler) RefreshToken(c *gin.Context) {
-	var req RefreshTokenRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		ErrorResponse(c, http.StatusBadRequest, "INVALID_REQUEST", "请求格式错误: "+err.Error())
+	// 优先从 Cookie 读取 refresh token
+	refreshToken, err := c.Cookie("refresh-token")
+	if err != nil || refreshToken == "" {
+		// 兼容旧方式：从 JSON body 读取
+		var req RefreshTokenRequest
+		if err := c.ShouldBindJSON(&req); err != nil {
+			ErrorResponse(c, http.StatusBadRequest, "INVALID_REQUEST", "请求格式错误: "+err.Error())
+			return
+		}
+		refreshToken = req.RefreshToken
+	}
+
+	if refreshToken == "" {
+		ErrorResponse(c, http.StatusBadRequest, "MISSING_REFRESH_TOKEN", "缺少刷新 Token")
 		return
 	}
 
+	// 解析刷新 Token 获取 jti，检查是否在黑名单中
+	if h.TokenBlacklist != nil {
+		refreshTokenClaims := &jwt.RegisteredClaims{}
+		_, _, err := new(jwt.Parser).ParseUnverified(refreshToken, refreshTokenClaims)
+		if err == nil && refreshTokenClaims.ID != "" {
+			isBlacklisted, err := h.TokenBlacklist.IsRefreshTokenBlacklisted(c.Request.Context(), refreshTokenClaims.ID)
+			if err == nil && isBlacklisted {
+				ErrorResponse(c, http.StatusUnauthorized, "TOKEN_REVOKED", "刷新 Token 已被撤销")
+				return
+			}
+		}
+	}
+
 	// 验证并刷新 Token
-	token, err := h.AuthService.RefreshToken(c.Request.Context(), req.RefreshToken)
+	token, err := h.AuthService.RefreshToken(c.Request.Context(), refreshToken)
 	if err != nil {
 		ErrorResponse(c, http.StatusUnauthorized, "INVALID_REFRESH_TOKEN", "无效的刷新 Token")
 		return
 	}
 
-	c.JSON(http.StatusOK, TokenInfo{
-		AccessToken:  token.AccessToken,
-		RefreshToken: token.RefreshToken,
-		ExpiresIn:    token.ExpiresIn,
-		TokenType:    "Bearer",
+	// 设置新的 access token cookie (15 分钟)
+	c.SetSameSite(http.SameSiteLaxMode)
+	c.SetCookie("access-token", token.AccessToken, 15*60, "/", "", true, true)
+	// 同时更新 refresh token cookie (7 天)
+	c.SetCookie("refresh-token", token.RefreshToken, 7*24*60*60, "/", "", true, true)
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": "Token 刷新成功",
 	})
 }
 
 // Logout 处理 POST /api/v1/auth/logout
-// 用户登出接口（可选：将 Token 加入黑名单）
+// 用户登出接口，将 Token 加入黑名单实现安全登出
 func (h *AuthHandler) Logout(c *gin.Context) {
-	// Clear the access token cookie
+	// 获取当前请求的 Token
+	authHeader := c.GetHeader("Authorization")
+	if h.TokenBlacklist != nil && authHeader != "" {
+		// 提取 Bearer Token
+		parts := strings.SplitN(authHeader, " ", 2)
+		if len(parts) == 2 && strings.EqualFold(parts[0], "Bearer") {
+			tokenString := parts[1]
+
+			// 解析 Token 获取 jti 和 exp
+			claims := &jwt.RegisteredClaims{}
+			_, _, err := new(jwt.Parser).ParseUnverified(tokenString, claims)
+			if err == nil && claims.ID != "" && claims.ExpiresAt != nil {
+				// 计算剩余有效期
+				remainingTime := time.Until(claims.ExpiresAt.Time)
+				if remainingTime > 0 {
+					// 将 Access Token 加入黑名单
+					_ = h.TokenBlacklist.AddToken(c.Request.Context(), claims.ID, remainingTime)
+				}
+			}
+		}
+	}
+
+	// 获取刷新 Token（从 Cookie 或请求体）
+	refreshToken, _ := c.Cookie("refresh-token")
+	if refreshToken == "" {
+		// 尝试从请求体获取
+		var req struct {
+			RefreshToken string `json:"refresh_token"`
+		}
+		if err := c.ShouldBindJSON(&req); err == nil && req.RefreshToken != "" {
+			refreshToken = req.RefreshToken
+		}
+	}
+
+	// 将刷新 Token 也加入黑名单
+	if h.TokenBlacklist != nil && refreshToken != "" {
+		refreshClaims := &jwt.RegisteredClaims{}
+		_, _, err := new(jwt.Parser).ParseUnverified(refreshToken, refreshClaims)
+		if err == nil && refreshClaims.ID != "" && refreshClaims.ExpiresAt != nil {
+			remainingTime := time.Until(refreshClaims.ExpiresAt.Time)
+			if remainingTime > 0 {
+				_ = h.TokenBlacklist.AddRefreshToken(c.Request.Context(), refreshClaims.ID, remainingTime)
+			}
+		}
+	}
+
+	// 清除 Cookie
 	c.SetSameSite(http.SameSiteLaxMode)
 	c.SetCookie("access-token", "", -1, "/", "", true, true)
 	c.SetCookie("refresh-token", "", -1, "/", "", true, true)
-
-	// TODO: Implement token blacklist using Redis
-	// h.AuthService.InvalidateToken(c.Request.Context(), tokenString)
 
 	c.JSON(http.StatusOK, gin.H{"message": "登出成功"})
 }

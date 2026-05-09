@@ -4,6 +4,8 @@ package handler
 import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/wire"
+
+	"maas-router/internal/cache"
 )
 
 // ProviderSet Handler 层 Wire ProviderSet
@@ -38,8 +40,14 @@ var ProviderSet = wire.NewSet(
 	// 品牌设置 Handler
 	NewBrandingHandler,
 
+	// 配置 Handler
+	NewConfigHandler,
+
 	// Handler 组装器
 	NewHandlerAssembler,
+
+	// 依赖：Cache 层
+	cache.ProviderSet,
 )
 
 // HandlerAssembler Handler 组装器
@@ -73,6 +81,9 @@ type HandlerAssembler struct {
 
 	// 品牌设置 Handler
 	BrandingHandler *BrandingHandler
+
+	// 配置 Handler
+	ConfigHandler *ConfigHandler
 }
 
 // NewHandlerAssembler 创建 Handler 组装器
@@ -88,6 +99,7 @@ func NewHandlerAssembler(
 	balanceHandler *BalanceHandler,
 	channelTestHandler *ChannelTestHandler,
 	brandingHandler *BrandingHandler,
+	configHandler *ConfigHandler,
 ) *HandlerAssembler {
 	return &HandlerAssembler{
 		GatewayHandler:       gatewayHandler,
@@ -101,6 +113,7 @@ func NewHandlerAssembler(
 		BalanceHandler:       balanceHandler,
 		ChannelTestHandler:   channelTestHandler,
 		BrandingHandler:      brandingHandler,
+		ConfigHandler:        configHandler,
 	}
 }
 
@@ -165,6 +178,9 @@ func (a *HandlerAssembler) HandlerGroup() HandlerGroup {
 		GetBranding:       a.BrandingHandler.GetBranding,
 		UpdateBranding:    a.BrandingHandler.UpdateBranding,
 		GetPublicBranding: a.BrandingHandler.GetPublicBranding,
+
+		// 配置 Handler
+		GetPublicConfig: a.ConfigHandler.GetPublicConfig,
 	}
 }
 
@@ -273,4 +289,7 @@ type HandlerGroup struct {
 	GetBranding       gin.HandlerFunc
 	UpdateBranding    gin.HandlerFunc
 	GetPublicBranding gin.HandlerFunc
+
+	// 配置 handler
+	GetPublicConfig gin.HandlerFunc
 }
